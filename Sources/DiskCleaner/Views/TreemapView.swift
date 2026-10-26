@@ -134,13 +134,12 @@ struct TreemapTile: View {
 
     /// A top-level tile that only *contains* covered children keeps a neutral fill.
     private var fill: Color {
+        let categoryFill = isTop ? Theme.tileFill(for: category) : Theme.innerTileFill(for: category)
         switch style {
-        case .normal, .safe where model.displayMode == .category:
-            return isTop ? Theme.tileFill(for: category) : Theme.innerTileFill(for: category)
-        case .safe: return Theme.cleanupFill
+        case .normal: return categoryFill
+        case .safe: return model.displayMode == .category ? categoryFill : Theme.cleanupFill
         case .review: return Theme.reviewFill
         case .muted: return isTop ? Theme.mutedFill : Theme.mutedInnerFill
-        default: return Theme.tileFill(for: category)
         }
     }
 

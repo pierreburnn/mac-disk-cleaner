@@ -181,18 +181,42 @@ struct BreadcrumbRow: View {
 
 struct LegendRow: View {
     var body: some View {
-        HStack(spacing: 18) {
+        // Full labels when they fit beside the "Supprimer" button, short ones otherwise.
+        ViewThatFits(in: .horizontal) {
+            legend(spacing: 18, short: false)
+            legend(spacing: 14, short: false)
+            legend(spacing: 14, short: true)
+            legend(spacing: 10, short: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func legend(spacing: CGFloat, short: Bool) -> some View {
+        HStack(spacing: spacing) {
             ForEach(NodeCategory.allCases, id: \.self) { cat in
                 HStack(spacing: 6) {
                     RoundedRectangle(cornerRadius: 2)
                         .fill(Theme.legendColor(for: cat))
                         .frame(width: 8, height: 8)
-                    Text(cat.displayName)
+                    Text(short ? Self.shortName(cat) : cat.displayName)
                         .font(.system(size: 11.5))
                         .foregroundColor(Theme.textSecondary)
+                        .lineLimit(1)
+                        .fixedSize()
                 }
             }
-            Spacer(minLength: 0)
+        }
+        .fixedSize()
+    }
+
+    static func shortName(_ cat: NodeCategory) -> String {
+        switch cat {
+        case .documents: return "Documents"
+        case .devTools: return "Dev tools"
+        case .codeProjects: return "Projects"
+        case .sdks: return "SDKs"
+        case .aiModels: return "AI models"
+        case .packageCaches: return "Pkg caches"
         }
     }
 }
