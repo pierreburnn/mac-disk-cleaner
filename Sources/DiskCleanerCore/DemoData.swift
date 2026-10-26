@@ -87,8 +87,7 @@ public struct DemoData: Sendable {
                 f("Emulator images", 7.3, sdk, path: "avd"),
             ]),
             d(".gradle", pk, [
-                f("caches", 6.1, pk),
-                f("wrapper", 0.5, pk),
+                f("caches", 6.6, pk),
             ]),
             d("Documents", doc, [
                 f("Invoices", 1.6, doc), f("Design", 1.3, doc), f("Contracts", 1.0, doc),
@@ -155,10 +154,10 @@ public struct DemoData: Sendable {
                 id: "gradle-caches",
                 title: "Gradle caches",
                 displayPath: "~/.gradle",
-                paths: ["\(homePath)/.gradle/caches", "\(homePath)/.gradle/wrapper"],
+                paths: ["\(homePath)/.gradle/caches"],
                 bytes: gb(6.6),
                 safety: .safe,
-                detail: "Gradle build caches and wrapper distributions. Re-downloaded on next build.",
+                detail: "Gradle build caches (downloaded dependencies, build cache). Re-downloaded on next build.",
                 command: .removePaths
             ),
             Recommendation(

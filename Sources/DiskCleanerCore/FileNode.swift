@@ -27,6 +27,9 @@ public final class FileNode: Identifiable, @unchecked Sendable {
         return value
     }
 
+    /// Drop the memoised total (call after editing a descendant in place).
+    public func invalidateTotal() { _total = -1 }
+
     /// Total file count (self if file, or sum of descendants).
     public var fileCount: Int {
         if isDirectory {

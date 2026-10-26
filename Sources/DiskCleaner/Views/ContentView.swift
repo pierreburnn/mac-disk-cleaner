@@ -8,6 +8,7 @@ import AppKit
 struct ContentView: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.isSnapshot) var isSnapshot: Bool
+    @State private var keyMonitor = TreemapKeyMonitor()
 
     var body: some View {
         VStack(spacing: Theme.gap) {
@@ -29,6 +30,22 @@ struct ContentView: View {
         .padding(.bottom, Theme.padding)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.background)
+        .overlay(TrashConfirmationOverlay())
+        .alert("Impossible de mettre à la Corbeille", isPresented: Binding(
+            get: { model.trashErrorMessage != nil },
+            set: { if !$0 { model.trashErrorMessage = nil } })) {
+            Button("OK", role: .cancel) { model.trashErrorMessage = nil }
+        } message: {
+            Text(model.trashErrorMessage ?? "")
+        }
+        .onAppear { if !isSnapshot { keyMonitor.install(model: model) } }
+        .onChange(of: model.lastTrashedMessage) { message in
+            guard message != nil else { return }
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 6_000_000_000)
+                if model.lastTrashedMessage == message { model.lastTrashedMessage = nil }
+            }
+        }
     }
 
     @ViewBuilder

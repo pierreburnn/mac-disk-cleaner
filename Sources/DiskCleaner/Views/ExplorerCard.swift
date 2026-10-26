@@ -13,7 +13,7 @@ struct ExplorerCard: View {
                     Text("Explorer")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(Theme.textPrimary)
-                    Text("Your home folder, sized by space used. Click a tile to open it.")
+                    Text("Your home folder, sized by space used. Click to select, double-click to open.")
                         .font(.system(size: 12.5))
                         .foregroundColor(Theme.textSecondary)
                         .lineLimit(1)
@@ -48,9 +48,13 @@ struct ExplorerCard: View {
             .padding(.horizontal, 15)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            LegendRow()
-                .padding(.horizontal, 18)
-                .frame(height: 38)
+            HStack(spacing: 12) {
+                LegendRow()
+                TrashButton()
+            }
+            .padding(.leading, 18)
+            .padding(.trailing, 15)
+            .frame(height: 44)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.cardBackground)
@@ -156,8 +160,15 @@ struct BreadcrumbRow: View {
                     .foregroundColor(index == model.breadcrumb.count - 1 ? Theme.textSecondary : Theme.textPrimary)
                     .onTapGesture { model.navigateToBreadcrumb(at: index) }
             }
-            Spacer()
-            if let node = model.currentNode {
+            Spacer(minLength: 16)
+            if model.tileSelection != nil {
+                SelectionInfo()
+            } else if let message = model.lastTrashedMessage {
+                Label(message, systemImage: "checkmark.circle.fill")
+                    .font(.system(size: 11.5))
+                    .foregroundColor(Theme.cleanableBorder)
+                    .lineLimit(1)
+            } else if let node = model.currentNode {
                 Text(ByteFormatter.format(node.totalAllocatedSize))
                     .font(Theme.monoFont(size: 11.5))
                     .foregroundColor(Theme.textSecondary)

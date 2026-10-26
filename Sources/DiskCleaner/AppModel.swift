@@ -60,6 +60,19 @@ public final class AppModel: ObservableObject {
     @Published public var showCopiedFeedback: Bool = false
     @Published public var isDemo: Bool = false
 
+    // Treemap selection & move-to-Trash
+    @Published public var tileSelection: TileSelection?
+    @Published public var pendingTrash: FileNode?
+    @Published public var trashErrorMessage: String?
+    @Published public var lastTrashedMessage: String?
+    @Published public var isTrashing: Bool = false
+    /// Bumped whenever the tree is edited in place (FileNode is a class).
+    @Published public var treeRevision: Int = 0
+    /// Snapshot-only: render the Delete button as it looks for a real item.
+    public var previewTrashEnabled: Bool = false
+    /// Injectable for tests / previews.
+    public var trasher: TrashPerforming = FileManagerTrasher()
+
     private let scanner = DiskScanner()
     private var coverageCache: [String: TileCoverage] = [:]
     /// Set when the app was launched in snapshot mode (no automatic scan).
@@ -166,6 +179,7 @@ public final class AppModel: ObservableObject {
         selectedRecommendationIDs = DemoData.defaultSelectedIDs
         volumeInfo = DemoData.makeVolumeInfo()
         breadcrumb = []
+        tileSelection = nil
         isScanning = false
         needsFullDiskAccess = false
     }
@@ -174,6 +188,7 @@ public final class AppModel: ObservableObject {
         isScanning = true
         scanProgress = nil
         breadcrumb = []
+        tileSelection = nil
 
         let homeURL = FileManager.default.homeDirectoryForCurrentUser
         let result = await scanner.scan(root: homeURL) { [weak self] progress in
@@ -204,6 +219,7 @@ public final class AppModel: ObservableObject {
     }
 
     public func navigateTo(node: FileNode) {
+        tileSelection = nil
         if node.isDirectory && !node.children.isEmpty {
             if let root = rootNode, node.id == root.id {
                 breadcrumb = []
@@ -219,6 +235,7 @@ public final class AppModel: ObservableObject {
             navigateTo(node: parent)
             return
         }
+        tileSelection = nil
         breadcrumb.append(parent)
         breadcrumb.append(node)
     }
@@ -248,9 +265,11 @@ public final class AppModel: ObservableObject {
 
     public func navigateToRoot() {
         breadcrumb = []
+        tileSelection = nil
     }
 
     public func navigateToBreadcrumb(at index: Int) {
+        tileSelection = nil
         if index < breadcrumb.count {
             breadcrumb = Array(breadcrumb.prefix(index + 1))
         }

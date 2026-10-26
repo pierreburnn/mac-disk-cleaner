@@ -49,6 +49,15 @@ struct DiskCleanerApp: App {
                 }
                 .keyboardShortcut("s", modifiers: .command)
             }
+            CommandGroup(after: .pasteboard) {
+                Button("Supprimer (mettre à la Corbeille)…") {
+                    model.requestTrashSelection()
+                }
+                .keyboardShortcut(.delete, modifiers: .command)
+                .disabled(!model.canTrashSelection)
+                Button("Désélectionner") { model.select(nil) }
+                    .disabled(model.tileSelection == nil)
+            }
         }
     }
 

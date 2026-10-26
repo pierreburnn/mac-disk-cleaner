@@ -34,7 +34,53 @@ public struct SnapshotRenderer {
         if let p = renderSnapshot(model: model, filename: "explorer-real.png", outputDir: outputDir) { paths.append(p) }
         model.displayMode = .cleanup
         if let p = renderSnapshot(model: model, filename: "explorer-real-cleanup.png", outputDir: outputDir) { paths.append(p) }
+
+        // A real, deletable selection: the button is genuinely enabled here.
+        model.displayMode = .category
+        if let root = model.rootNode {
+            let candidates = root.children.flatMap { top -> [FileNode] in
+                model.deletionPolicy.refusal(forPath: top.url.path) == nil ? [top] : top.children
+            }.filter { model.deletionPolicy.refusal(forPath: $0.url.path) == nil && $0.totalAllocatedSize > 0 }
+            if let pick = candidates.max(by: { $0.totalAllocatedSize < $1.totalAllocatedSize }) {
+                model.select(.node(pick))
+                print("Real selection: \(pick.url.path) – enabled: \(model.canTrashSelection)")
+                if let p = renderSnapshot(model: model, filename: "explorer-real-selected.png", outputDir: outputDir) { paths.append(p) }
+                model.select(nil)
+            }
+        }
+
+        if ProcessInfo.processInfo.environment["DISK_CLEANER_TRASH_SELFTEST"] == "1" {
+            guard await trashSelfTest(model: model) else { return [] }
+        }
         return paths
+    }
+
+    /// End-to-end check of the real Trash flow on the CI runner: selects the
+    /// throw-away folder ~/DiskCleanerTrashSelfTest (created by CI), confirms,
+    /// and verifies it moved to the Trash and the tree was updated.
+    private func trashSelfTest(model: AppModel) async -> Bool {
+        guard let root = model.rootNode,
+              let node = root.children.first(where: { $0.name == "DiskCleanerTrashSelfTest" }) else {
+            fputs("Trash self-test: folder not found in scan\n", stderr); return false
+        }
+        let before = root.totalAllocatedSize
+        let size = node.totalAllocatedSize
+        model.select(.node(node))
+        guard model.canTrashSelection else { fputs("Trash self-test: button disabled\n", stderr); return false }
+        model.requestTrashSelection()
+        guard model.pendingTrash === node else { fputs("Trash self-test: no confirmation\n", stderr); return false }
+        model.confirmTrash()
+        if let err = model.trashErrorMessage { fputs("Trash self-test: error \(err)\n", stderr); return false }
+        let gone = !FileManager.default.fileExists(atPath: node.url.path)
+        let removed = !root.children.contains { $0 === node }
+        let after = root.totalAllocatedSize
+        let trash = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".Trash")
+        let inTrash = ((try? FileManager.default.contentsOfDirectory(atPath: trash.path)) ?? [])
+            .contains { $0.hasPrefix("DiskCleanerTrashSelfTest") }
+        print("Trash self-test: gone=\(gone) removedFromTree=\(removed) inTrash=\(inTrash) total \(before) -> \(after) (item \(size))")
+        // Wait for the recommendation refresh to land.
+        try? await Task.sleep(nanoseconds: 1_500_000_000)
+        return gone && removed && after == before - size
     }
 
     /// Render demo screenshots to the specified output directory.
@@ -68,6 +114,24 @@ public struct SnapshotRenderer {
             }
             model.navigateToRoot()
         }
+
+        // Selection + "Supprimer" (demo: the button is shown as for a real item;
+        // nothing can actually be deleted in demo mode).
+        model.previewTrashEnabled = true
+        if let desktop = model.rootNode?.children.first(where: { $0.name == "Desktop" }),
+           let target = desktop.children.first(where: { $0.name == "old-saas" }) {
+            model.select(.node(target))
+            if let path = renderSnapshot(model: model, filename: "explorer-selected.png", outputDir: outputDir) {
+                paths.append(path)
+            }
+            model.pendingTrash = target
+            if let path = renderSnapshot(model: model, filename: "explorer-confirm.png", outputDir: outputDir) {
+                paths.append(path)
+            }
+            model.pendingTrash = nil
+            model.select(nil)
+        }
+        model.previewTrashEnabled = false
 
         return paths
     }
