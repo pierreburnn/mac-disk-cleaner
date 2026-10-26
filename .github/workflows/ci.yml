@@ -36,7 +36,7 @@ jobs:
 
       - name: Build .app and .dmg
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then V="${GITHUB_REF_NAME#v}"; else V="1.2.0"; fi
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then V="${GITHUB_REF_NAME#v}"; else V="1.2.1"; fi
           scripts/build_app.sh "$V"
 
       - name: Screenshots (demo mode)

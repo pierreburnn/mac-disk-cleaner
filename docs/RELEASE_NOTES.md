@@ -1,4 +1,13 @@
-## Disk Cleaner 1.2.0
+## Disk Cleaner 1.2.1
+
+Corrections après relecture de la 1.2.0 :
+
+- **Zoom** : pendant l'animation, la tuile qui grandit affiche déjà ses sous‑tuiles à l'échelle (plus de rectangle vide). À la fin du zoom, la treemap occupe toute la zone de l'Explorer. L'animation inverse par le fil d'Ariane fonctionne de la même manière. Nouveaux tests de disposition et d'animation.
+- **Contours de sélection** : ils correspondent toujours au compteur. Une tuile sélectionnée trop petite pour afficher son nom a un contour de 3 pt et un léger fond bleu, et son nom apparaît au survol. Une sélection cachée dans un dossier réduit est signalée par un contour pointillé et un badge sur ce dossier, et le bandeau l'indique (« 1 dans un dossier réduit »).
+- **Confirmation** : les chemins s'affichent en `~/…`.
+- **Supprimer (N)** compte les chemins réels mis à la Corbeille, comme la confirmation. Le panneau affiche « N items · M chemins ».
+
+## Disk Cleaner 1.2.0 (rappel)
 
 Nouveautés demandées par Pierre :
 

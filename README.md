@@ -12,15 +12,19 @@
 
 ![Zoom Desktop](docs/screenshots/explorer-desktop.png)
 
-*Sélection multiple : plusieurs tuiles cliquées (contour bleu) apparaissent en tête du panneau de droite, avec les recommandations cochées, et le bouton **Supprimer (N)** est en bas à droite :*
+*Sélection multiple : plusieurs tuiles cliquées (contour bleu) apparaissent en tête du panneau de droite, avec les recommandations cochées. Une tuile sélectionnée mais non dessinée à ce niveau est signalée par un contour pointillé et un badge sur son dossier. Le bouton **Supprimer (N)** compte les chemins réels mis à la Corbeille :*
 
 ![Sélection multiple](docs/screenshots/explorer-selected.png)
+
+*La même sélection vue dans Desktop :*
+
+![Sélection dans Desktop](docs/screenshots/explorer-selected-desktop.png)
 
 *Confirmation groupée avant la mise à la Corbeille :*
 
 ![Confirmation groupée](docs/screenshots/explorer-confirm.png)
 
-*Animation de zoom au double‑clic (image intermédiaire) :*
+*Animation de zoom au double‑clic (image intermédiaire : la tuile grandit en affichant déjà ses sous‑tuiles) :*
 
 ![Zoom](docs/screenshots/explorer-zoom.png)
 
@@ -33,13 +37,13 @@
 ## Téléchargement
 
 - Dernière version : <https://github.com/pierreburnn/mac-disk-cleaner/releases/latest>
-- Lien direct v1.2.0 : [DiskCleaner-1.2.0.dmg](https://github.com/pierreburnn/mac-disk-cleaner/releases/download/v1.2.0/DiskCleaner-1.2.0.dmg)
+- Lien direct v1.2.1 : [DiskCleaner-1.2.1.dmg](https://github.com/pierreburnn/mac-disk-cleaner/releases/download/v1.2.1/DiskCleaner-1.2.1.dmg)
 
 Compatible macOS 13 Ventura et plus récent, Mac Apple Silicon **et** Intel (binaire universel).
 
 ## Installation
 
-1. Téléchargez le fichier `DiskCleaner-1.2.0.dmg`.
+1. Téléchargez le fichier `DiskCleaner-1.2.1.dmg`.
 2. Ouvrez‑le, puis glissez **Disk Cleaner** sur le raccourci **Applications**.
 3. Éjectez le disque image.
 
