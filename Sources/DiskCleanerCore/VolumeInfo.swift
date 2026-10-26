@@ -28,6 +28,7 @@ public struct VolumeInfo: Sendable {
     /// Query volume info for the volume containing the given URL.
     public static func query(for url: URL) -> VolumeInfo? {
         do {
+            #if os(macOS)
             let values = try url.resourceValues(forKeys: [
                 .volumeTotalCapacityKey,
                 .volumeAvailableCapacityForImportantUsageKey,
@@ -35,11 +36,16 @@ public struct VolumeInfo: Sendable {
             ])
             let total = Int64(values.volumeTotalCapacity ?? 0)
             let available: Int64
-            if let importantUsage = values.volumeAvailableCapacityForImportantUsage {
+            if let importantUsage = values.volumeAvailableCapacityForImportantUsage, importantUsage > 0 {
                 available = importantUsage
             } else {
                 available = Int64(values.volumeAvailableCapacity ?? 0)
             }
+            #else
+            let values = try url.resourceValues(forKeys: [.volumeTotalCapacityKey, .volumeAvailableCapacityKey])
+            let total = Int64(values.volumeTotalCapacity ?? 0)
+            let available = Int64(values.volumeAvailableCapacity ?? 0)
+            #endif
             return VolumeInfo(totalCapacity: total, availableCapacity: available)
         } catch {
             return nil

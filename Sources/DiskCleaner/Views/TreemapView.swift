@@ -1,319 +1,262 @@
-// TreemapView.swift – Treemap visualization with nested tiles
+// TreemapView.swift – Two-level squarified treemap with absolute positioning.
 import SwiftUI
 import DiskCleanerCore
+
+/// One rectangle to draw. Computed up-front so the view tree stays flat and
+/// every tile is placed with `.position` in a top-leading coordinate space.
+struct TreemapTileItem: Identifiable {
+    enum Level { case top, inner }
+    let id: String
+    let node: FileNode?          // nil = "other" bucket (many tiny items)
+    let parent: FileNode?        // parent tile for inner items
+    let rect: CGRect
+    let level: Level
+    let showsChildren: Bool
+}
+
+enum TreemapGeometry {
+    static let outerGap: CGFloat = 3      // half of the 6 pt gap between top-level tiles
+    static let innerGap: CGFloat = 2      // half of the 4 pt gap between inner tiles
+    static let headerHeight: CGFloat = 24
+    static let innerPadding: CGFloat = 5
+
+    static func items(for node: FileNode, in size: CGSize) -> [TreemapTileItem] {
+        guard size.width > 1, size.height > 1 else { return [] }
+        var result: [TreemapTileItem] = []
+        let outer = TMRect(x: 0, y: 0, width: Double(size.width), height: Double(size.height))
+        let tops = TreemapLayout.layoutChildren(of: node, in: outer, minFraction: 0.002)
+        for (i, top) in tops.enumerated() {
+            let r = inset(top.rect, outerGap)
+            guard r.width >= 2, r.height >= 2 else { continue }
+            let child = top.node
+            let canNest = child.map { $0.isDirectory && $0.children.count > 0 } ?? false
+                && r.width > 70 && r.height > 56
+            result.append(TreemapTileItem(id: "t\(i)-\(child?.id ?? "other")", node: child, parent: nil,
+                                          rect: r, level: .top, showsChildren: canNest))
+            guard canNest, let child else { continue }
+            let innerArea = TMRect(x: Double(r.minX + innerPadding - innerGap),
+                                   y: Double(r.minY + headerHeight - innerGap),
+                                   width: Double(r.width - 2 * (innerPadding - innerGap)),
+                                   height: Double(r.height - headerHeight - innerPadding + 2 * innerGap))
+            guard innerArea.width > 8, innerArea.height > 8 else { continue }
+            let inners = TreemapLayout.layoutChildren(of: child, in: innerArea, minFraction: 0.004)
+            for (j, inner) in inners.enumerated() {
+                let ir = inset(inner.rect, innerGap)
+                guard ir.width >= 2, ir.height >= 2 else { continue }
+                result.append(TreemapTileItem(id: "t\(i)-\(j)-\(inner.node?.id ?? "other")", node: inner.node,
+                                              parent: child, rect: ir, level: .inner, showsChildren: false))
+            }
+        }
+        return result
+    }
+
+    private static func inset(_ r: TMRect, _ d: CGFloat) -> CGRect {
+        CGRect(x: CGFloat(r.x) + d, y: CGFloat(r.y) + d,
+               width: max(0, CGFloat(r.width) - 2 * d), height: max(0, CGFloat(r.height) - 2 * d))
+    }
+}
 
 struct TreemapView: View {
     let node: FileNode
     @EnvironmentObject var model: AppModel
-    @Environment(\.isSnapshot) var isSnapshot: Bool
 
     var body: some View {
         GeometryReader { geo in
-            let rect = TMRect(x: 0, y: 0, width: Double(geo.size.width), height: Double(geo.size.height))
-            let items = TreemapLayout.layoutChildren(of: node, in: rect, minFraction: 0.008)
-
+            let items = TreemapGeometry.items(for: node, in: geo.size)
             ZStack(alignment: .topLeading) {
-                ForEach(Array(items.enumerated()), id: \.offset) { idx, item in
-                    if let childNode = item.node {
-                        TopLevelTile(
-                            node: childNode,
-                            rect: insetRect(item.rect, by: 3)
-                        )
-                        .environmentObject(model)
-                        .environment(\.isSnapshot, isSnapshot)
-                    }
+                Color.clear
+                ForEach(items) { item in
+                    TreemapTile(item: item)
+                        .frame(width: item.rect.width, height: item.rect.height)
+                        .position(x: item.rect.midX, y: item.rect.midY)
                 }
             }
-            .frame(width: geo.size.width, height: geo.size.height)
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
         }
-    }
-
-    private func insetRect(_ r: TMRect, by amount: Double) -> TMRect {
-        return TMRect(
-            x: r.x + amount,
-            y: r.y + amount,
-            width: max(0, r.width - amount * 2),
-            height: max(0, r.height - amount * 2)
-        )
     }
 }
 
-// MARK: - Top-level tile
+// MARK: - Tile
 
-struct TopLevelTile: View {
-    let node: FileNode
-    let rect: TMRect
+struct TreemapTile: View {
+    let item: TreemapTileItem
     @EnvironmentObject var model: AppModel
-    @Environment(\.isSnapshot) var isSnapshot: Bool
-    @State private var isHovered: Bool = false
+    @State private var hovered = false
 
-    private var isCleanupMode: Bool {
-        model.displayMode == .cleanup
+    private var isTop: Bool { item.level == .top }
+    private var radius: CGFloat { isTop ? Theme.tileRadius : 4.5 }
+
+    private var coverage: TileCoverage {
+        guard let node = item.node else { return .none }
+        return model.coverage(of: node)
     }
 
-    private var isCleanable: Bool {
-        model.isCleanable(node: node)
+    private var category: NodeCategory {
+        item.node?.category ?? item.parent?.category ?? .devTools
     }
 
-    private var shouldDim: Bool {
-        isCleanupMode && !isCleanable
-    }
+    private enum Style { case normal, muted, safe, review }
 
-    private var fillColor: Color {
-        if isCleanupMode && isCleanable {
-            return Theme.cleanupFill
+    private var style: Style {
+        let c = coverage
+        if model.displayMode == .category {
+            return c.kind != .none && c.selected ? .safe : .normal
         }
-        return Theme.tileFill(for: node.category)
+        switch c.kind {
+        case .safe: return .safe
+        case .review: return .review
+        case .none: return .muted
+        }
     }
 
-    private var borderColor: Color {
-        if isCleanable {
-            return Theme.cleanableBorder
+    /// A top-level tile that only *contains* covered children keeps a neutral fill.
+    private var fill: Color {
+        switch style {
+        case .normal, .safe where model.displayMode == .category:
+            return isTop ? Theme.tileFill(for: category) : Theme.innerTileFill(for: category)
+        case .safe: return Theme.cleanupFill
+        case .review: return Theme.reviewFill
+        case .muted: return isTop ? Theme.mutedFill : Theme.mutedInnerFill
+        default: return Theme.tileFill(for: category)
         }
-        return isHovered ? Theme.tileBorder(for: node.category).opacity(0.8) : Theme.tileBorder(for: node.category)
     }
+
+    private var border: Color {
+        switch style {
+        case .safe: return Theme.cleanableBorder
+        case .review: return Theme.reviewBorder
+        case .muted: return Theme.mutedBorder
+        case .normal: return Theme.tileBorder(for: category)
+        }
+    }
+
+    private var hatch: Color? {
+        switch style {
+        case .safe: return Theme.hatchGreen
+        case .review: return coverage.selected ? Theme.hatchAmber : nil
+        default: return nil
+        }
+    }
+
+    private var textOpacity: Double { style == .muted ? 0.55 : 1 }
 
     var body: some View {
-        let w = CGFloat(rect.width)
-        let h = CGFloat(rect.height)
-
+        let w = item.rect.width
+        let h = item.rect.height
         ZStack(alignment: .topLeading) {
-            // Background
-            RoundedRectangle(cornerRadius: Theme.tileRadius)
-                .fill(fillColor)
-
-            // Hatching for cleanable tiles
-            if isCleanable {
-                HatchingPattern()
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.tileRadius))
+            RoundedRectangle(cornerRadius: radius, style: .continuous).fill(fill)
+            if let hatch {
+                HatchingPattern(color: hatch, spacing: isTop ? 7 : 6)
+                    .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
             }
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .strokeBorder(hovered ? border.opacity(1) : border,
+                              lineWidth: (style == .safe || style == .review) ? 1.2 : 1)
+            if let node = item.node {
+                labels(node: node, w: w, h: h).opacity(textOpacity)
+            }
+        }
+        .contentShape(Rectangle())
+        .onHover { hovered = $0 }
+        .onTapGesture { tap() }
+        .help(item.node.map { "\($0.name) — \(ByteFormatter.format($0.totalAllocatedSize))" } ?? "Other items")
+    }
 
-            // Border
-            RoundedRectangle(cornerRadius: Theme.tileRadius)
-                .stroke(isCleanable ? Theme.cleanableBorder : borderColor, lineWidth: isCleanable ? 1.5 : 1)
-
-            // Content
+    @ViewBuilder
+    private func labels(node: FileNode, w: CGFloat, h: CGFloat) -> some View {
+        let size = (node.approximate ? "~" : "") + ByteFormatter.format(node.totalAllocatedSize)
+        if isTop {
             VStack(alignment: .leading, spacing: 0) {
-                // Header with name and size
-                if w > 50 && h > 20 {
-                    HStack(alignment: .top) {
+                if w > 44 && h > 18 {
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
                         Text(node.name)
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.system(size: 12.5, weight: .medium))
                             .foregroundColor(Theme.textPrimary)
                             .lineLimit(1)
-                        Spacer(minLength: 2)
-                        let sizeText = formatSize(node)
-                        Text(sizeText)
-                            .font(Theme.monoFont(size: 11))
-                            .foregroundColor(Theme.textSecondary)
-                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .layoutPriority(1)
+                        Spacer(minLength: 0)
+                        if w > 96 {
+                            Text(size)
+                                .font(Theme.monoFont(size: 11))
+                                .foregroundColor(Theme.textSecondary)
+                                .lineLimit(1)
+                                .fixedSize()
+                        }
                     }
-                    .padding(.horizontal, 6)
-                    .padding(.top, 4)
+                    .padding(.horizontal, 8)
+                    .padding(.top, 6)
                 }
-
-                // Inner children
-                if node.isDirectory && !node.children.isEmpty && w > 60 && h > 50 {
-                    let innerRect = TMRect(
-                        x: 0, y: 0,
-                        width: max(0, Double(w) - 12),
-                        height: max(0, Double(h) - 26)
-                    )
-                    InnerTilesView(
-                        node: node,
-                        rect: innerRect,
-                        isCleanupMode: isCleanupMode,
-                        isParentCleanable: isCleanable
-                    )
-                    .environmentObject(model)
-                    .padding(.horizontal, 6)
-                    .padding(.bottom, 4)
-                } else if w > 50 && h > 40 {
-                    // Leaf tile - show size big at bottom
-                    Spacer()
-                    let parts = ByteFormatter.parts(node.totalAllocatedSize)
-                    let sizeFont = tileSizeFont(width: w, height: h)
-                    Text("\(node.approximate ? "~" : "")\(parts.value) \(parts.unit)")
-                        .font(Theme.monoFont(size: sizeFont, weight: .semibold))
-                        .foregroundColor(Theme.textPrimary.opacity(0.7))
-                        .padding(.horizontal, 6)
-                        .padding(.bottom, 6)
+                Spacer(minLength: 0)
+                if bigSizeVisible(w: w, h: h) {
+                    Text(size)
+                        .font(Theme.monoFont(size: 18, weight: .medium))
+                        .foregroundColor(Theme.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .padding(.horizontal, 8)
+                        .padding(.bottom, 7)
                 }
             }
-        }
-        .frame(width: w, height: h)
-        .offset(x: CGFloat(rect.x), y: CGFloat(rect.y))
-        .opacity(shouldDim ? 0.35 : 1.0)
-        .contentShape(Rectangle())
-        .onTapGesture {
-            if node.isDirectory && !node.children.isEmpty {
-                model.navigateTo(node: node)
-            }
-        }
-        .onHover { hovering in
-            if !isSnapshot {
-                isHovered = hovering
-            }
-        }
-    }
-
-    private func formatSize(_ node: FileNode) -> String {
-        let prefix = node.approximate ? "~" : ""
-        return prefix + ByteFormatter.format(node.totalAllocatedSize)
-    }
-
-    private func tileSizeFont(width: CGFloat, height: CGFloat) -> CGFloat {
-        let area = width * height
-        if area > 30000 { return 18 }
-        if area > 15000 { return 16 }
-        if area > 8000 { return 14 }
-        return 13
-    }
-}
-
-// MARK: - Inner tiles (children within a top-level tile)
-
-struct InnerTilesView: View {
-    let node: FileNode
-    let rect: TMRect
-    let isCleanupMode: Bool
-    let isParentCleanable: Bool
-    @EnvironmentObject var model: AppModel
-
-    var body: some View {
-        GeometryReader { geo in
-            let innerRect = TMRect(x: 0, y: 0, width: Double(geo.size.width), height: Double(geo.size.height))
-            let items = TreemapLayout.layoutChildren(of: node, in: innerRect, minFraction: 0.02)
-
-            ZStack(alignment: .topLeading) {
-                ForEach(Array(items.enumerated()), id: \.offset) { idx, item in
-                    if let childNode = item.node {
-                        InnerTile(
-                            node: childNode,
-                            rect: insetRect(item.rect, by: 1.5),
-                            parentCategory: node.category,
-                            isCleanupMode: isCleanupMode,
-                            isParentCleanable: isParentCleanable
-                        )
-                        .environmentObject(model)
-                    }
-                }
-            }
-            .frame(width: geo.size.width, height: geo.size.height)
-        }
-    }
-
-    private func insetRect(_ r: TMRect, by amount: Double) -> TMRect {
-        TMRect(
-            x: r.x + amount,
-            y: r.y + amount,
-            width: max(0, r.width - amount * 2),
-            height: max(0, r.height - amount * 2)
-        )
-    }
-}
-
-struct InnerTile: View {
-    let node: FileNode
-    let rect: TMRect
-    let parentCategory: NodeCategory
-    let isCleanupMode: Bool
-    let isParentCleanable: Bool
-    @EnvironmentObject var model: AppModel
-
-    private var isCleanable: Bool {
-        model.isCleanable(node: node)
-    }
-
-    var body: some View {
-        let w = CGFloat(rect.width)
-        let h = CGFloat(rect.height)
-
-        ZStack(alignment: .topLeading) {
-            // Background
-            RoundedRectangle(cornerRadius: 4)
-                .fill(innerFill)
-
-            // Hatching
-            if isCleanable || isParentCleanable {
-                HatchingPattern()
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
-            }
-
-            // Border
-            RoundedRectangle(cornerRadius: 4)
-                .stroke(
-                    (isCleanable || isParentCleanable) ? Theme.cleanableBorder.opacity(0.5) : Theme.tileBorder(for: node.category).opacity(0.6),
-                    lineWidth: 0.5
-                )
-
-            // Content
+        } else {
             VStack(alignment: .leading, spacing: 0) {
-                // Name at top
-                if w > 40 && h > 18 {
+                if w > 38 && h > 18 {
                     Text(node.name)
-                        .font(.system(size: 10.5, weight: .regular))
+                        .font(.system(size: 11))
                         .foregroundColor(Theme.textPrimary.opacity(0.8))
                         .lineLimit(1)
                         .truncationMode(.tail)
-                        .padding(.leading, 4)
-                        .padding(.top, 3)
+                        .padding(.horizontal, 6)
+                        .padding(.top, 5)
                 }
-
                 Spacer(minLength: 0)
-
-                // Size at bottom
-                if w > 45 && h > 35 {
-                    let parts = ByteFormatter.parts(node.totalAllocatedSize)
-                    let sizeFont = innerSizeFont(width: w, height: h)
-                    Text("\(node.approximate ? "~" : "")\(parts.value) \(parts.unit)")
-                        .font(Theme.monoFont(size: sizeFont, weight: .semibold))
-                        .foregroundColor(Theme.textPrimary.opacity(0.55))
-                        .padding(.leading, 4)
-                        .padding(.bottom, 4)
+                if w > 58 && h > 44 {
+                    Text(size)
+                        .font(Theme.monoFont(size: h > 70 && w > 90 ? 15 : 12.5, weight: .medium))
+                        .foregroundColor(Theme.textPrimary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .padding(.horizontal, 6)
+                        .padding(.bottom, 5)
                 }
             }
         }
-        .frame(width: w, height: h)
-        .offset(x: CGFloat(rect.x), y: CGFloat(rect.y))
-        .opacity(isCleanupMode && !isCleanable && !isParentCleanable ? 0.35 : 1.0)
     }
 
-    private var innerFill: Color {
-        if isCleanupMode && (isCleanable || isParentCleanable) {
-            return Theme.cleanupFill.opacity(0.7)
+    /// Leaf top-level tiles (no nested children) show their size large, bottom-left.
+    private func bigSizeVisible(w: CGFloat, h: CGFloat) -> Bool {
+        !item.showsChildren && w > 70 && h > 56
+    }
+
+    private func tap() {
+        guard let node = item.node else { return }
+        if let parent = item.parent {
+            model.navigateTo(node: node, via: parent)
+        } else if node.isDirectory && !node.children.isEmpty {
+            model.navigateTo(node: node)
         }
-        return Theme.innerTileFill(for: node.category)
-    }
-
-    private func innerSizeFont(width: CGFloat, height: CGFloat) -> CGFloat {
-        let area = width * height
-        if area > 20000 { return 18 }
-        if area > 10000 { return 16 }
-        if area > 5000 { return 14 }
-        return 13
     }
 }
 
-// MARK: - Diagonal hatching pattern
+// MARK: - Hatching
 
 struct HatchingPattern: View {
+    var color: Color = Theme.hatchGreen
+    var spacing: CGFloat = 7
+    var lineWidth: CGFloat = 1.3
+
     var body: some View {
         Canvas { context, size in
-            let spacing: CGFloat = 6
-            let lineWidth: CGFloat = 1
-            let color = Color(red: 0.204, green: 0.659, blue: 0.325).opacity(0.35)
-
-            let maxDim = size.width + size.height
-
-            var x: CGFloat = -size.height
-            while x < maxDim {
-                var path = Path()
-                path.move(to: CGPoint(x: x, y: size.height))
-                path.addLine(to: CGPoint(x: x + size.height, y: 0))
-                context.stroke(path, with: .color(color), lineWidth: lineWidth)
-                x += spacing
+            var path = Path()
+            let total = size.width + size.height
+            var offset: CGFloat = -size.height
+            while offset < total {
+                path.move(to: CGPoint(x: offset, y: size.height))
+                path.addLine(to: CGPoint(x: offset + size.height, y: 0))
+                offset += spacing
             }
+            context.stroke(path, with: .color(color), lineWidth: lineWidth)
         }
+        .allowsHitTesting(false)
     }
 }

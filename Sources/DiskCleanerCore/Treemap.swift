@@ -38,7 +38,7 @@ public struct TreemapLayout: Sendable {
     public static func layout(sizes: [Double], in rect: TMRect) -> [TMRect] {
         guard !sizes.isEmpty else { return [] }
         let totalArea = rect.width * rect.height
-        let totalSize = sizes.reduce(0, +)
+        let totalSize = sizes.filter { $0 > 0 }.reduce(0, +)
 
         // Build indexed items, filter positives
         struct IndexedItem {

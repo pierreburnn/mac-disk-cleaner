@@ -16,10 +16,12 @@ struct DiskCleanerApp: App {
     init() {
         // Handle --snapshot mode before UI loads
         let args = CommandLine.arguments
-        if let snapshotIdx = args.firstIndex(of: "--snapshot"),
-           snapshotIdx + 1 < args.count {
-            let outputDir = args[snapshotIdx + 1]
-            handleSnapshot(outputDir: outputDir)
+        if let idx = args.firstIndex(of: "--snapshot"), idx + 1 < args.count {
+            SnapshotRenderer.isActive = true
+            handleSnapshot(outputDir: args[idx + 1], real: false)
+        } else if let idx = args.firstIndex(of: "--snapshot-real"), idx + 1 < args.count {
+            SnapshotRenderer.isActive = true
+            handleSnapshot(outputDir: args[idx + 1], real: true)
         }
     }
 
@@ -29,6 +31,7 @@ struct DiskCleanerApp: App {
                 .environmentObject(model)
                 .frame(minWidth: 1100, minHeight: 720)
                 .onAppear {
+                    if SnapshotRenderer.isActive { return }
                     if shouldLoadDemo() {
                         model.loadDemo()
                     } else if model.rootNode == nil && !model.isScanning {
@@ -38,11 +41,11 @@ struct DiskCleanerApp: App {
                     }
                 }
         }
-        .defaultSize(width: 1280, height: 820)
+        .defaultSize(width: 1280, height: 860)
         .commands {
             CommandGroup(after: .saveItem) {
                 Button("Save Script…") {
-                    saveScript()
+                    model.saveScriptWithPanel()
                 }
                 .keyboardShortcut("s", modifiers: .command)
             }
@@ -56,10 +59,10 @@ struct DiskCleanerApp: App {
         return false
     }
 
-    private func handleSnapshot(outputDir: String) {
+    private func handleSnapshot(outputDir: String, real: Bool) {
         Task { @MainActor in
             let renderer = SnapshotRenderer()
-            let paths = renderer.render(to: outputDir)
+            let paths = real ? await renderer.renderRealScan(to: outputDir) : renderer.render(to: outputDir)
             if paths.isEmpty {
                 fputs("Error: No snapshots rendered\n", stderr)
                 exit(1)
@@ -71,25 +74,6 @@ struct DiskCleanerApp: App {
         }
     }
 
-    private func saveScript() {
-        #if canImport(AppKit)
-        let script = model.generateScript()
-        let panel = NSSavePanel()
-        panel.title = "Save Cleanup Script"
-        panel.nameFieldStringValue = "cleanup.sh"
-        panel.allowedContentTypes = [.shellScript]
-        panel.begin { response in
-            if response == .OK, let url = panel.url {
-                try? script.write(to: url, atomically: true, encoding: .utf8)
-                // Make executable
-                try? FileManager.default.setAttributes(
-                    [.posixPermissions: 0o755],
-                    ofItemAtPath: url.path
-                )
-            }
-        }
-        #endif
-    }
 }
 
 #if canImport(AppKit)

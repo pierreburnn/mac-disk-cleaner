@@ -1,6 +1,9 @@
 // AppModel.swift – Main application state
 import SwiftUI
 import DiskCleanerCore
+#if canImport(AppKit)
+import AppKit
+#endif
 
 /// Display mode for the treemap.
 public enum DisplayMode: String, CaseIterable {
@@ -20,13 +23,32 @@ extension EnvironmentValues {
     }
 }
 
+/// Relationship between a treemap tile and the cleanup recommendations.
+public struct TileCoverage: Equatable {
+    public enum Kind { case none, safe, review }
+    public var kind: Kind
+    public var selected: Bool
+
+    public static let none = TileCoverage(kind: .none, selected: false)
+
+    public init(kind: Kind, selected: Bool) {
+        self.kind = kind
+        self.selected = selected
+    }
+
+    public init(safety: Safety, selected: Bool) {
+        self.kind = safety == .safe ? .safe : .review
+        self.selected = selected
+    }
+}
+
 /// Main application state object.
 @MainActor
 public final class AppModel: ObservableObject {
     // MARK: - Published state
     @Published public var rootNode: FileNode?
-    @Published public var recommendations: [Recommendation] = []
-    @Published public var selectedRecommendationIDs: Set<String> = []
+    @Published public var recommendations: [Recommendation] = [] { didSet { coverageCache = [:] } }
+    @Published public var selectedRecommendationIDs: Set<String> = [] { didSet { coverageCache = [:] } }
     @Published public var volumeInfo: VolumeInfo?
     @Published public var displayMode: DisplayMode = .category
     @Published public var breadcrumb: [FileNode] = []
@@ -39,6 +61,9 @@ public final class AppModel: ObservableObject {
     @Published public var isDemo: Bool = false
 
     private let scanner = DiskScanner()
+    private var coverageCache: [String: TileCoverage] = [:]
+    /// Set when the app was launched in snapshot mode (no automatic scan).
+    public var isSnapshotRun: Bool = false
 
     public init() {}
 
@@ -88,6 +113,27 @@ public final class AppModel: ObservableObject {
     public var cleanablePaths: Set<String> {
         let detector = RuleDetector()
         return detector.cleanablePaths(from: recommendations)
+    }
+
+    /// How a node relates to the recommendations (drives tile colouring).
+    public func coverage(of node: FileNode) -> TileCoverage {
+        if let cached = coverageCache[node.id] { return cached }
+        var result = TileCoverage.none
+        let path = node.url.path
+        if let rec = recommendations.first(where: { rec in
+            rec.paths.contains { p in path == p || path.hasPrefix(p + "/") }
+        }) {
+            result = TileCoverage(safety: rec.safety, selected: selectedRecommendationIDs.contains(rec.id))
+        } else if node.isDirectory, !node.children.isEmpty, node.allocatedSize < node.totalAllocatedSize / 50 {
+            // A folder whose every child is covered is itself covered (e.g. ~/.gradle).
+            let kids = node.children.map { coverage(of: $0) }
+            if kids.allSatisfy({ $0.kind != .none }) {
+                result = kids[0]
+                if !kids.allSatisfy({ $0.selected }) { result.selected = false }
+            }
+        }
+        coverageCache[node.id] = result
+        return result
     }
 
     /// Check if a file node's path is covered by any recommendation.
@@ -140,12 +186,13 @@ public final class AppModel: ObservableObject {
         deniedPaths = result.deniedPaths
         needsFullDiskAccess = result.needsFullDiskAccess
 
-        // Detect recommendations
-        let detector = RuleDetector()
-        recommendations = detector.detect(
-            root: result.root,
-            home: homeURL.path
-        )
+        // Detect recommendations (off the main thread)
+        let homePath = homeURL.path
+        let root = result.root
+        let detected: [Recommendation] = await Task.detached(priority: .userInitiated) {
+            RuleDetector().detect(root: root, home: homePath)
+        }.value
+        recommendations = detected
 
         // Auto-select safe recommendations
         selectedRecommendationIDs = Set(recommendations.filter { $0.safety == .safe }.map { $0.id })
@@ -164,6 +211,39 @@ public final class AppModel: ObservableObject {
                 breadcrumb.append(node)
             }
         }
+    }
+
+    /// Drill into `node`, which is a child of `parent` (itself a child of the current folder).
+    public func navigateTo(node: FileNode, via parent: FileNode) {
+        guard node.isDirectory, !node.children.isEmpty else {
+            navigateTo(node: parent)
+            return
+        }
+        breadcrumb.append(parent)
+        breadcrumb.append(node)
+    }
+
+    /// Ask where to save the cleanup script. Writing a file is the only thing
+    /// this does – the script is never executed by the app.
+    public func saveScriptWithPanel() {
+        #if canImport(AppKit)
+        let script = generateScript()
+        let panel = NSSavePanel()
+        panel.title = "Save Cleanup Script"
+        panel.nameFieldStringValue = "disk-cleanup.sh"
+        panel.allowedContentTypes = [.shellScript]
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            try? script.write(to: url, atomically: true, encoding: .utf8)
+        }
+        #endif
+    }
+
+    public func revealInFinder(_ path: String) {
+        guard !isDemo else { return }
+        #if canImport(AppKit)
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
+        #endif
     }
 
     public func navigateToRoot() {

@@ -277,7 +277,7 @@ public final class DiskScanner: @unchecked Sendable {
 
             // Hard link dedup: skip size for files with nlink > 1 that we've seen
             if st.st_nlink > 1 {
-                let inode = st.st_ino
+                let inode = UInt64(st.st_ino)
                 let alreadySeen: Bool
                 inodeLock.lock()
                 if seenInodes.contains(inode) {

@@ -5,109 +5,74 @@ import DiskCleanerCore
 struct StatsRow: View {
     @EnvironmentObject var model: AppModel
 
+    private var hasData: Bool { model.rootNode != nil }
+
     var body: some View {
         HStack(spacing: 0) {
-            // Free after cleanup
-            statCell(
-                label: "Free after cleanup",
-                dotColor: nil,
-                value: model.rootNode != nil ? ByteFormatter.parts(model.freeAfterCleanup).value : "—",
-                unit: model.rootNode != nil ? ByteFormatter.parts(model.freeAfterCleanup).unit : "",
-                trailing: model.selectedBytes > 0 ? ByteFormatter.formatSigned(model.selectedBytes) : nil,
-                trailingColor: Theme.safeGreen
-            )
-
-            cellDivider()
-
-            // Safe to remove
-            statCell(
-                label: "Safe to remove",
-                dotColor: Theme.safeGreen,
-                value: model.rootNode != nil ? ByteFormatter.parts(model.safeTotal).value : "—",
-                unit: model.rootNode != nil ? ByteFormatter.parts(model.safeTotal).unit : "",
-                trailing: model.rootNode != nil ? "\(model.safeRecommendations.count) items" : nil,
-                trailingColor: Theme.textSecondary
-            )
-
-            cellDivider()
-
-            // Needs review
-            statCell(
-                label: "Needs review",
-                dotColor: Theme.reviewOrange,
-                value: model.rootNode != nil ? ByteFormatter.parts(model.reviewTotal).value : "—",
-                unit: model.rootNode != nil ? ByteFormatter.parts(model.reviewTotal).unit : "",
-                trailing: model.rootNode != nil ? "\(model.reviewRecommendations.count) items" : nil,
-                trailingColor: Theme.textSecondary
-            )
-
-            cellDivider()
-
-            // Not scanned
-            statCell(
-                label: "Not scanned",
-                dotColor: nil,
-                value: model.rootNode != nil ? ByteFormatter.parts(model.notScanned).value : "—",
-                unit: model.rootNode != nil ? ByteFormatter.parts(model.notScanned).unit : "",
-                trailing: "system & apps",
-                trailingColor: Theme.textSecondary
-            )
+            statCell(label: "Free after cleanup", dot: nil,
+                     value: hasData ? Self.wholeGB(model.freeAfterCleanup) : "—",
+                     trailing: hasData && model.selectedBytes > 0 ? ByteFormatter.formatSigned(model.selectedBytes) : nil,
+                     trailingColor: Theme.safeGreen)
+            divider
+            statCell(label: "Safe to remove", dot: Theme.safeGreen,
+                     value: hasData ? ByteFormatter.format(model.safeTotal) : "—",
+                     trailing: hasData ? Self.items(model.safeRecommendations.count) : nil,
+                     trailingColor: Theme.textSecondary)
+            divider
+            statCell(label: "Needs review", dot: Theme.reviewOrange,
+                     value: hasData ? ByteFormatter.format(model.reviewTotal) : "—",
+                     trailing: hasData ? Self.items(model.reviewRecommendations.count) : nil,
+                     trailingColor: Theme.textSecondary)
+            divider
+            statCell(label: "Not scanned", dot: nil,
+                     value: hasData ? Self.wholeGB(model.notScanned) : "—",
+                     trailing: "system & apps",
+                     trailingColor: Theme.textSecondary)
         }
+        .frame(height: 76)
         .background(Theme.cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.cardRadius))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.cardRadius)
-                .stroke(Theme.cardBorder, lineWidth: 1)
-        )
+        .clipShape(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
+            .strokeBorder(Theme.cardBorder, lineWidth: 1))
     }
 
-    @ViewBuilder
-    private func statCell(
-        label: String,
-        dotColor: Color?,
-        value: String,
-        unit: String,
-        trailing: String?,
-        trailingColor: Color
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 4) {
-                if let dot = dotColor {
-                    Circle()
-                        .fill(dot)
-                        .frame(width: 7, height: 7)
+    static func items(_ n: Int) -> String { n == 1 ? "1 item" : "\(n) items" }
+
+    /// "92 GB" – whole gigabytes for the headline free/not-scanned figures.
+    static func wholeGB(_ bytes: Int64) -> String {
+        if abs(bytes) < 10_000_000_000 { return ByteFormatter.format(bytes) }
+        return "\(Int((Double(bytes) / 1_000_000_000).rounded())) GB"
+    }
+
+    private var divider: some View {
+        Rectangle().fill(Theme.divider).frame(width: 1)
+    }
+
+    private func statCell(label: String, dot: Color?, value: String,
+                          trailing: String?, trailingColor: Color) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 5) {
+                if let dot {
+                    Circle().fill(dot).frame(width: 6, height: 6)
                 }
                 Text(label)
                     .font(.system(size: 12))
                     .foregroundColor(Theme.textSecondary)
             }
-
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(value)
-                    .font(Theme.monoFont(size: 22, weight: .semibold))
+                    .font(Theme.monoFont(size: 23, weight: .bold))
                     .foregroundColor(Theme.textPrimary)
-
-                Text(unit)
-                    .font(Theme.monoFont(size: 14, weight: .medium))
-                    .foregroundColor(Theme.textSecondary)
-
-                if let trail = trailing {
-                    Text(trail)
-                        .font(Theme.monoFont(size: 12))
+                    .lineLimit(1)
+                if let trailing {
+                    Text(trailing)
+                        .font(Theme.monoFont(size: 11.5))
                         .foregroundColor(trailingColor)
+                        .lineLimit(1)
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    @ViewBuilder
-    private func cellDivider() -> some View {
-        Rectangle()
-            .fill(Theme.divider)
-            .frame(width: 1)
-            .padding(.vertical, 8)
+        .padding(.horizontal, 18)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
     }
 }

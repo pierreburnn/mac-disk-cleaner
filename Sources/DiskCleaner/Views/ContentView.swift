@@ -1,6 +1,9 @@
 // ContentView.swift – Main content layout
 import SwiftUI
 import DiskCleanerCore
+#if canImport(AppKit)
+import AppKit
+#endif
 
 struct ContentView: View {
     @EnvironmentObject var model: AppModel
@@ -8,27 +11,23 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: Theme.gap) {
-            // Full Disk Access banner
             if model.needsFullDiskAccess && !isSnapshot {
                 fullDiskAccessBanner()
             }
-
-            // Stats row
             StatsRow()
-                .environmentObject(model)
-
-            // Main content: Explorer + Recommendations
-            HStack(alignment: .top, spacing: Theme.gap) {
+            HStack(alignment: .top, spacing: Theme.gap + 2) {
                 ExplorerCard()
-                    .environmentObject(model)
-                    .environment(\.isSnapshot, isSnapshot)
-
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 RecommendationsPanel()
-                    .environmentObject(model)
-                    .environment(\.isSnapshot, isSnapshot)
+                    .frame(width: 384)
+                    .frame(maxHeight: .infinity)
             }
+            .frame(maxHeight: .infinity)
         }
-        .padding(Theme.padding)
+        .padding(.horizontal, Theme.padding)
+        .padding(.top, Theme.padding)
+        .padding(.bottom, Theme.padding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.background)
     }
 
@@ -42,16 +41,17 @@ struct ContentView: View {
                 .font(.system(size: 12))
                 .foregroundColor(Theme.textPrimary)
             Spacer()
-            Button("Open Settings") {
+            Text("Rescan")
+                .font(.system(size: 12))
+                .foregroundColor(Theme.textSecondary)
+                .onTapGesture { Task { await model.startScan() } }
+            FooterButton(title: "Open Full Disk Access settings", filled: true) {
                 #if canImport(AppKit)
                 if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles") {
                     NSWorkspace.shared.open(url)
                 }
                 #endif
             }
-            .buttonStyle(.plain)
-            .font(.system(size: 12, weight: .medium))
-            .foregroundColor(.blue)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

@@ -80,7 +80,7 @@ public final class FakeHome {
     public func createSymlink(relativePath: String, destination: String) throws {
         let linkURL = url.appendingPathComponent(relativePath)
         try fm.createDirectory(at: linkURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try fm.createSymbolicLink(at: linkURL, withDestinationPath: destination)
+        try fm.createSymbolicLink(atPath: linkURL.path, withDestinationPath: destination)
     }
 
     /// Populate the standard tree matching the project specification:

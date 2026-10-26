@@ -4,71 +4,68 @@ import DiskCleanerCore
 
 struct ExplorerCard: View {
     @EnvironmentObject var model: AppModel
+    @Environment(\.isSnapshot) var isSnapshot: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text("Explorer")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(Theme.textPrimary)
                     Text("Your home folder, sized by space used. Click a tile to open it.")
-                        .font(.system(size: 12))
+                        .font(.system(size: 12.5))
                         .foregroundColor(Theme.textSecondary)
+                        .lineLimit(1)
                 }
-                Spacer()
+                Spacer(minLength: 8)
+                if !model.isDemo && !isSnapshot {
+                    RescanButton()
+                }
                 SegmentedControl(selection: $model.displayMode)
             }
             .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
+            .padding(.top, 13)
+            .padding(.bottom, 12)
 
-            // Divider
-            Rectangle()
-                .fill(Theme.divider)
-                .frame(height: 1)
-                .padding(.horizontal, 0)
+            Rectangle().fill(Theme.divider).frame(height: 1)
 
-            // Breadcrumb row
             BreadcrumbRow()
-                .environmentObject(model)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 6)
+                .padding(.horizontal, 18)
+                .frame(height: 38)
 
-            // Treemap
-            if model.isScanning {
-                scanningOverlay()
-            } else if let node = model.currentNode {
-                TreemapView(node: node)
-                    .environmentObject(model)
-                    .padding(.horizontal, 12)
-                    .padding(.bottom, 8)
-            } else {
-                Spacer()
-                Text("No data")
-                    .foregroundColor(Theme.textSecondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                Spacer()
+            Group {
+                if model.isScanning {
+                    scanningOverlay()
+                } else if let node = model.currentNode {
+                    TreemapView(node: node)
+                } else {
+                    Text("No data")
+                        .foregroundColor(Theme.textSecondary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
             }
+            .padding(.horizontal, 15)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // Legend
             LegendRow()
-                .padding(.horizontal, 16)
-                .padding(.bottom, 10)
+                .padding(.horizontal, 18)
+                .frame(height: 40)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.cardRadius))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.cardRadius)
-                .stroke(Theme.cardBorder, lineWidth: 1)
-        )
+        .clipShape(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
+            .strokeBorder(Theme.cardBorder, lineWidth: 1))
     }
 
     @ViewBuilder
     private func scanningOverlay() -> some View {
         VStack(spacing: 8) {
             Spacer()
+            if !isSnapshot {
+                ProgressView().progressViewStyle(.linear).frame(width: 220)
+            }
             if let progress = model.scanProgress {
                 Text("Scanning: \(progress.filesScanned) files")
                     .font(.system(size: 13, weight: .medium))
@@ -100,35 +97,42 @@ struct SegmentedControl: View {
     var body: some View {
         HStack(spacing: 0) {
             ForEach(DisplayMode.allCases, id: \.self) { mode in
-                segmentButton(mode)
+                let isSelected = selection == mode
+                Text(mode.rawValue)
+                    .font(.system(size: 12, weight: isSelected ? .semibold : .regular))
+                    .foregroundColor(isSelected ? Theme.textPrimary : Theme.textSecondary)
+                    .frame(width: 70, height: 26)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(isSelected ? Theme.segmentSelected : Color.clear)
+                            .shadow(color: .black.opacity(isSelected ? 0.12 : 0), radius: 1.5, y: 0.5)
+                    )
+                    .contentShape(Rectangle())
+                    .onTapGesture { selection = mode }
             }
         }
-        .background(Theme.segmentTrack)
-        .clipShape(RoundedRectangle(cornerRadius: 7))
-        .frame(height: 28)
+        .padding(2)
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.segmentTrack))
     }
+}
 
-    @ViewBuilder
-    private func segmentButton(_ mode: DisplayMode) -> some View {
-        let isSelected = selection == mode
-        Text(mode.rawValue)
-            .font(.system(size: 12, weight: .medium))
-            .foregroundColor(isSelected ? Theme.textPrimary : Theme.textSecondary)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 5)
-            .background(
-                Group {
-                    if isSelected {
-                        RoundedRectangle(cornerRadius: 6)
-                            .fill(Theme.segmentSelected)
-                            .shadow(color: .black.opacity(0.06), radius: 1, y: 1)
-                    }
-                }
-            )
-            .contentShape(Rectangle())
-            .onTapGesture {
-                selection = mode
-            }
+struct RescanButton: View {
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "arrow.clockwise").font(.system(size: 11, weight: .medium))
+            Text("Rescan").font(.system(size: 12))
+        }
+        .foregroundColor(model.isScanning ? Theme.textTertiary : Theme.textSecondary)
+        .frame(height: 30)
+        .padding(.horizontal, 10)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard !model.isScanning else { return }
+            Task { await model.startScan() }
+        }
+        .help("Scan the home folder again")
     }
 }
 
@@ -139,33 +143,23 @@ struct BreadcrumbRow: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            // Home link
-            Button(action: { model.navigateToRoot() }) {
-                Text("~ Home")
-                    .font(.system(size: 12))
-                    .foregroundColor(Theme.textSecondary)
-            }
-            .buttonStyle(.plain)
-
-            // Breadcrumb components
+            Text("~ Home")
+                .font(.system(size: 12))
+                .foregroundColor(model.breadcrumb.isEmpty ? Theme.textSecondary : Theme.textPrimary)
+                .onTapGesture { model.navigateToRoot() }
             ForEach(Array(model.breadcrumb.enumerated()), id: \.offset) { index, node in
-                Text(" › ")
+                Text("  ›  ")
                     .font(.system(size: 12))
                     .foregroundColor(Theme.textTertiary)
-                Button(action: { model.navigateToBreadcrumb(at: index) }) {
-                    Text(node.name)
-                        .font(.system(size: 12))
-                        .foregroundColor(Theme.textSecondary)
-                }
-                .buttonStyle(.plain)
+                Text(node.name)
+                    .font(.system(size: 12))
+                    .foregroundColor(index == model.breadcrumb.count - 1 ? Theme.textSecondary : Theme.textPrimary)
+                    .onTapGesture { model.navigateToBreadcrumb(at: index) }
             }
-
             Spacer()
-
-            // Total size
             if let node = model.currentNode {
                 Text(ByteFormatter.format(node.totalAllocatedSize))
-                    .font(Theme.monoFont(size: 12))
+                    .font(Theme.monoFont(size: 11.5))
                     .foregroundColor(Theme.textSecondary)
             }
         }
@@ -176,17 +170,18 @@ struct BreadcrumbRow: View {
 
 struct LegendRow: View {
     var body: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 18) {
             ForEach(NodeCategory.allCases, id: \.self) { cat in
-                HStack(spacing: 4) {
+                HStack(spacing: 6) {
                     RoundedRectangle(cornerRadius: 2)
                         .fill(Theme.legendColor(for: cat))
-                        .frame(width: 10, height: 10)
+                        .frame(width: 8, height: 8)
                     Text(cat.displayName)
-                        .font(.system(size: 11))
+                        .font(.system(size: 11.5))
                         .foregroundColor(Theme.textSecondary)
                 }
             }
+            Spacer(minLength: 0)
         }
     }
 }

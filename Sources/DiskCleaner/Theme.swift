@@ -6,10 +6,10 @@ import DiskCleanerCore
 public struct Theme {
 
     // MARK: - Background
-    public static let background = Color(red: 0.957, green: 0.957, blue: 0.961) // #F4F4F5
+    public static let background = Color(red: 0.969, green: 0.969, blue: 0.973) // #F7F7F8
     public static let cardBackground = Color.white
-    public static let cardBorder = Color(red: 0.902, green: 0.902, blue: 0.910) // #E6E6E8
-    public static let divider = Color(red: 0.902, green: 0.902, blue: 0.910) // #E6E6E8
+    public static let cardBorder = Color(red: 0.910, green: 0.910, blue: 0.918) // #E8E8EA
+    public static let divider = Color(red: 0.933, green: 0.933, blue: 0.941) // #EEEEF0
 
     // MARK: - Text colors
     public static let textPrimary = Color(red: 0.1, green: 0.1, blue: 0.1)
@@ -27,30 +27,30 @@ public struct Theme {
     public static let reviewBadgeText = Color(red: 0.761, green: 0.416, blue: 0.071) // #C26A12
 
     // MARK: - Segment control
-    public static let segmentTrack = Color(red: 0.941, green: 0.941, blue: 0.949) // #F0F0F2
+    public static let segmentTrack = Color(red: 0.925, green: 0.925, blue: 0.933) // #ECECEE
     public static let segmentSelected = Color.white
 
     // MARK: - Treemap pastel fills
     public static func tileFill(for category: NodeCategory) -> Color {
         switch category {
-        case .documents:     return Color(red: 0.988, green: 0.902, blue: 0.839) // #FCE6D6
-        case .devTools:      return Color(red: 0.925, green: 0.925, blue: 0.933) // #ECECEE
-        case .codeProjects:  return Color(red: 0.902, green: 0.894, blue: 0.984) // #E6E4FB
-        case .sdks:          return Color(red: 0.867, green: 0.941, blue: 0.957) // #DDF0F4
-        case .aiModels:      return Color(red: 0.984, green: 0.882, blue: 0.918) // #FBE1EA
-        case .packageCaches: return Color(red: 0.863, green: 0.902, blue: 0.969) // #DCE6F7
+        case .documents: return Color(red: 0.992, green: 0.937, blue: 0.902) // #FDEFE6
+        case .devTools: return Color(red: 0.937, green: 0.941, blue: 0.949) // #EFF0F2
+        case .codeProjects: return Color(red: 0.922, green: 0.922, blue: 1.000) // #EBEBFF
+        case .sdks: return Color(red: 0.890, green: 0.953, blue: 0.973) // #E3F3F8
+        case .aiModels: return Color(red: 0.992, green: 0.918, blue: 0.941) // #FDEAF0
+        case .packageCaches: return Color(red: 0.906, green: 0.933, blue: 0.996) // #E7EEFE
         }
     }
 
     /// Slightly darker border for treemap tiles.
     public static func tileBorder(for category: NodeCategory) -> Color {
         switch category {
-        case .documents:     return Color(red: 0.949, green: 0.765, blue: 0.627) // #F2C3A0
-        case .devTools:      return Color(red: 0.827, green: 0.827, blue: 0.847) // #D3D3D8
-        case .codeProjects:  return Color(red: 0.749, green: 0.729, blue: 0.941) // #BFBAF0
-        case .sdks:          return Color(red: 0.663, green: 0.839, blue: 0.878) // #A9D6E0
-        case .aiModels:      return Color(red: 0.941, green: 0.702, blue: 0.780) // #F0B3C7
-        case .packageCaches: return Color(red: 0.686, green: 0.769, blue: 0.918) // #AFC4EA
+        case .documents: return Color(red: 0.937, green: 0.788, blue: 0.698) // #EFC9B2
+        case .devTools: return Color(red: 0.855, green: 0.859, blue: 0.875) // #DADBDF
+        case .codeProjects: return Color(red: 0.788, green: 0.784, blue: 0.957) // #C9C8F4
+        case .sdks: return Color(red: 0.725, green: 0.863, blue: 0.902) // #B9DCE6
+        case .aiModels: return Color(red: 0.953, green: 0.761, blue: 0.839) // #F3C2D6
+        case .packageCaches: return Color(red: 0.725, green: 0.796, blue: 0.949) // #B9CBF2
         }
     }
 
@@ -69,18 +69,29 @@ public struct Theme {
     // MARK: - Treemap inner tile fills (lighter)
     public static func innerTileFill(for category: NodeCategory) -> Color {
         switch category {
-        case .documents:     return Color(red: 0.996, green: 0.961, blue: 0.933)
-        case .devTools:      return Color(red: 0.965, green: 0.965, blue: 0.969)
-        case .codeProjects:  return Color(red: 0.953, green: 0.949, blue: 0.996)
-        case .sdks:          return Color(red: 0.937, green: 0.973, blue: 0.984)
-        case .aiModels:      return Color(red: 0.996, green: 0.945, blue: 0.961)
-        case .packageCaches: return Color(red: 0.937, green: 0.953, blue: 0.988)
+        case .documents: return Color(red: 0.992, green: 0.890, blue: 0.839) // #FDE3D6
+        case .devTools: return Color(red: 0.902, green: 0.906, blue: 0.918) // #E6E7EA
+        case .codeProjects: return Color(red: 0.871, green: 0.875, blue: 0.996) // #DEDFFE
+        case .sdks: return Color(red: 0.863, green: 0.937, blue: 0.961) // #DCEFF5
+        case .aiModels: return Color(red: 0.984, green: 0.859, blue: 0.910) // #FBDBE8
+        case .packageCaches: return Color(red: 0.851, green: 0.894, blue: 0.984) // #D9E4FB
         }
     }
 
+    // MARK: - Cleanup mode
+    public static let hatchGreen = Color(red: 0.420, green: 0.749, blue: 0.494).opacity(0.75)
+    public static let hatchAmber = Color(red: 0.902, green: 0.620, blue: 0.239).opacity(0.65)
+    public static let reviewFill = Color(red: 0.992, green: 0.937, blue: 0.851)   // #FDEFD9
+    public static let reviewBorder = Color(red: 0.925, green: 0.698, blue: 0.392) // #ECB264
+    public static let mutedFill = Color(red: 0.945, green: 0.945, blue: 0.949)    // #F1F1F2
+    public static let mutedInnerFill = Color(red: 0.918, green: 0.918, blue: 0.925)
+    public static let mutedBorder = Color(red: 0.882, green: 0.882, blue: 0.894)
+    public static let windowWidth: CGFloat = 1200
+    public static let windowHeight: CGFloat = 821
+
     // MARK: - Cleanable overlay
     public static let cleanableHatchColor = Color(red: 0.204, green: 0.659, blue: 0.325).opacity(0.35) // #34A853
-    public static let cleanableBorder = Color(red: 0.365, green: 0.733, blue: 0.478) // #5DBB7A
+    public static let cleanableBorder = Color(red: 0.400, green: 0.733, blue: 0.482) // #66BB7B
     public static let cleanupFill = Color(red: 0.890, green: 0.961, blue: 0.910) // #E3F5E8
 
     // MARK: - Fonts
@@ -92,6 +103,6 @@ public struct Theme {
     // MARK: - Card
     public static let cardRadius: CGFloat = 12
     public static let tileRadius: CGFloat = 6
-    public static let padding: CGFloat = 16
-    public static let gap: CGFloat = 12
+    public static let padding: CGFloat = 10
+    public static let gap: CGFloat = 16
 }

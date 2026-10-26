@@ -1,6 +1,9 @@
 // RecommendationsPanel.swift – Right panel with cleanup recommendations
 import SwiftUI
 import DiskCleanerCore
+#if canImport(AppKit)
+import AppKit
+#endif
 
 struct RecommendationsPanel: View {
     @EnvironmentObject var model: AppModel
@@ -8,187 +11,154 @@ struct RecommendationsPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Header
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text("Recommendations")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(Theme.textPrimary)
                 Text("Select items to build a cleanup script")
-                    .font(.system(size: 12))
+                    .font(.system(size: 12.5))
                     .foregroundColor(Theme.textSecondary)
             }
             .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 8)
+            .padding(.top, 13)
+            .padding(.bottom, 10)
 
-            Rectangle()
-                .fill(Theme.divider)
-                .frame(height: 1)
+            Rectangle().fill(Theme.divider).frame(height: 1)
 
-            // Recommendation list
-            if isSnapshot {
-                // VStack for snapshot rendering (ImageRenderer can't do ScrollView)
-                VStack(spacing: 0) {
-                    recommendationContent()
-                }
-                .clipped()
-            } else {
-                ScrollView {
-                    VStack(spacing: 0) {
-                        recommendationContent()
+            // Scrollable list; the footer below stays pinned.
+            Group {
+                if isSnapshot {
+                    VStack(spacing: 0) { listContent }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                        .clipped()
+                } else {
+                    ScrollView(.vertical) {
+                        VStack(spacing: 0) { listContent }
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
+            .layoutPriority(-1)
 
-            // Footer
-            Rectangle()
-                .fill(Theme.divider)
-                .frame(height: 1)
-
-            footerView()
+            Rectangle().fill(Theme.divider).frame(height: 1)
+            footer
         }
-        .frame(width: 330)
+        .frame(maxHeight: .infinity)
         .background(Theme.cardBackground)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.cardRadius))
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.cardRadius)
-                .stroke(Theme.cardBorder, lineWidth: 1)
-        )
+        .clipShape(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
+            .strokeBorder(Theme.cardBorder, lineWidth: 1))
     }
 
     @ViewBuilder
-    private func recommendationContent() -> some View {
-        // Safe group
+    private var listContent: some View {
+        if model.recommendations.isEmpty && !model.isScanning {
+            Text(model.rootNode == nil ? "Waiting for the scan…" : "Nothing worth cleaning was found. 🎉")
+                .font(.system(size: 12.5))
+                .foregroundColor(Theme.textSecondary)
+                .padding(20)
+        }
         if !model.safeRecommendations.isEmpty {
-            groupHeader(
-                label: "Safe to remove",
-                badgeBg: Theme.safeBadgeBg,
-                badgeText: Theme.safeBadgeText,
-                total: model.safeTotal
-            )
+            groupHeader("Safe to remove", bg: Theme.safeBadgeBg, fg: Theme.safeBadgeText, total: model.safeTotal)
             ForEach(model.safeRecommendations) { rec in
                 RecommendationRow(recommendation: rec)
-                    .environmentObject(model)
-                Rectangle()
-                    .fill(Theme.divider)
-                    .frame(height: 1)
-                    .padding(.leading, 44)
+                Rectangle().fill(Theme.divider).frame(height: 1)
             }
         }
-
-        // Review group
         if !model.reviewRecommendations.isEmpty {
-            groupHeader(
-                label: "Review first",
-                badgeBg: Theme.reviewBadgeBg,
-                badgeText: Theme.reviewBadgeText,
-                total: model.reviewTotal
-            )
+            groupHeader("Review first", bg: Theme.reviewBadgeBg, fg: Theme.reviewBadgeText, total: model.reviewTotal)
             ForEach(model.reviewRecommendations) { rec in
                 RecommendationRow(recommendation: rec)
-                    .environmentObject(model)
-                Rectangle()
-                    .fill(Theme.divider)
-                    .frame(height: 1)
-                    .padding(.leading, 44)
+                Rectangle().fill(Theme.divider).frame(height: 1)
             }
         }
     }
 
-    @ViewBuilder
-    private func groupHeader(label: String, badgeBg: Color, badgeText: Color, total: Int64) -> some View {
-        HStack {
-            Text(label)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundColor(badgeText)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(
-                    Capsule().fill(badgeBg)
-                )
-
-            Spacer()
-
-            Text(ByteFormatter.format(total))
-                .font(Theme.monoFont(size: 12))
-                .foregroundColor(Theme.textSecondary)
+    private func groupHeader(_ label: String, bg: Color, fg: Color, total: Int64) -> some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(label)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(fg)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(bg))
+                Spacer()
+                Text(ByteFormatter.format(total))
+                    .font(Theme.monoFont(size: 11.5))
+                    .foregroundColor(Theme.textSecondary)
+            }
+            .padding(.horizontal, 16)
+            .frame(height: 34)
+            Rectangle().fill(Theme.divider).frame(height: 1)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
     }
 
-    @ViewBuilder
-    private func footerView() -> some View {
-        VStack(spacing: 8) {
-            // Selected summary
-            HStack(spacing: 4) {
-                let parts = ByteFormatter.parts(model.selectedBytes)
-                Text(parts.value)
-                    .font(Theme.monoFont(size: 14, weight: .bold))
+    private var footer: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 5) {
+                Text(ByteFormatter.format(model.selectedBytes))
+                    .font(Theme.monoFont(size: 13, weight: .bold))
                     .foregroundColor(Theme.textPrimary)
-                Text(parts.unit)
-                    .font(Theme.monoFont(size: 12, weight: .medium))
-                    .foregroundColor(Theme.textSecondary)
-                Text("selected · \(model.selectedCount) items")
-                    .font(.system(size: 12))
+                Text("selected · \(StatsRow.items(model.selectedCount))")
+                    .font(.system(size: 12.5))
                     .foregroundColor(Theme.textSecondary)
                 Spacer()
             }
-
-            // Buttons
             HStack(spacing: 8) {
-                // Select safe button
-                Button(action: { model.selectAllSafe() }) {
-                    Text("Select safe")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(Theme.textPrimary)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 6)
-                        .background(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(Color.white)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .stroke(Theme.cardBorder, lineWidth: 1)
-                                )
-                        )
+                FooterButton(title: "Select safe", filled: false) { model.selectAllSafe() }
+                FooterButton(title: model.showCopiedFeedback ? "Copied ✓" : "Copy script", filled: true) {
+                    copyScript()
                 }
-                .buttonStyle(.plain)
-
-                // Copy script button
-                Button(action: { copyScript() }) {
-                    ZStack {
-                        Text(model.showCopiedFeedback ? "Copied!" : "Copy script")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 6)
-                            .background(
-                                RoundedRectangle(cornerRadius: 6)
-                                    .fill(Color.black)
-                            )
-                    }
-                }
-                .buttonStyle(.plain)
-
+                .opacity(model.selectedCount == 0 ? 0.5 : 1)
                 Spacer()
+                if !isSnapshot {
+                    Text("Save…")
+                        .font(.system(size: 12))
+                        .foregroundColor(Theme.textSecondary)
+                        .onTapGesture { model.saveScriptWithPanel() }
+                        .help("Save the cleanup script to a file")
+                }
             }
         }
         .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.top, 12)
+        .padding(.bottom, 14)
     }
 
     private func copyScript() {
+        guard model.selectedCount > 0 else { return }
         #if canImport(AppKit)
         let script = model.generateScript()
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(script, forType: .string)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(script, forType: .string)
         model.showCopiedFeedback = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            model.showCopiedFeedback = false
-        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { model.showCopiedFeedback = false }
         #endif
+    }
+}
+
+struct FooterButton: View {
+    let title: String
+    let filled: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Text(title)
+            .font(.system(size: 12.5, weight: .medium))
+            .foregroundColor(filled ? .white : Theme.textPrimary)
+            .padding(.horizontal, 12)
+            .frame(height: 28)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(filled ? Color(white: 0.07) : Color.white)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .strokeBorder(filled ? Color.clear : Color(white: 0.85), lineWidth: 1)
+            )
+            .contentShape(Rectangle())
+            .onTapGesture(perform: action)
     }
 }
 
@@ -198,81 +168,76 @@ struct RecommendationRow: View {
     let recommendation: Recommendation
     @EnvironmentObject var model: AppModel
 
-    private var isSelected: Bool {
-        model.selectedRecommendationIDs.contains(recommendation.id)
-    }
-
-    private var isExpanded: Bool {
-        model.expandedRecommendationIDs.contains(recommendation.id)
-    }
+    private var isSelected: Bool { model.selectedRecommendationIDs.contains(recommendation.id) }
+    private var isExpanded: Bool { model.expandedRecommendationIDs.contains(recommendation.id) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top, spacing: 8) {
-                // Custom checkbox
-                CustomCheckbox(isChecked: isSelected) {
-                    model.toggleRecommendation(recommendation)
-                }
-                .padding(.top, 2)
-
-                // Title and path
-                VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .center, spacing: 12) {
+                CustomCheckbox(isChecked: isSelected) { model.toggleRecommendation(recommendation) }
+                VStack(alignment: .leading, spacing: 4) {
                     Text(recommendation.title)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 13.5))
                         .foregroundColor(Theme.textPrimary)
                         .lineLimit(1)
                     Text(recommendation.displayPath)
                         .font(Theme.monoFont(size: 11))
                         .foregroundColor(Theme.textSecondary)
                         .lineLimit(1)
-                        .truncationMode(.middle)
+                        .truncationMode(.tail)
                 }
-
-                Spacer(minLength: 4)
-
-                // Size
-                let sizeText: String = {
-                    let prefix = recommendation.approximate ? "~" : ""
-                    return prefix + ByteFormatter.format(recommendation.bytes)
-                }()
-                Text(sizeText)
-                    .font(Theme.monoFont(size: 13))
-                    .foregroundColor(Theme.textSecondary)
+                .contentShape(Rectangle())
+                .onTapGesture { model.toggleRecommendation(recommendation) }
+                Spacer(minLength: 6)
+                Text((recommendation.approximate ? "~" : "") + ByteFormatter.format(recommendation.bytes))
+                    .font(Theme.monoFont(size: 13, weight: .medium))
+                    .foregroundColor(Theme.textPrimary.opacity(0.85))
                     .lineLimit(1)
-
-                // Chevron
-                Button(action: { model.toggleExpandRecommendation(recommendation) }) {
-                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 11))
-                        .foregroundColor(Theme.textTertiary)
-                }
-                .buttonStyle(.plain)
+                    .fixedSize()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundColor(Color(white: 0.62))
+                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                    .frame(width: 18, height: 30)
+                    .contentShape(Rectangle())
+                    .onTapGesture { model.toggleExpandRecommendation(recommendation) }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-            .contentShape(Rectangle())
+            .padding(.leading, 16)
+            .padding(.trailing, 10)
+            .frame(height: 60)
 
-            // Expanded details
             if isExpanded {
                 VStack(alignment: .leading, spacing: 6) {
                     Text(recommendation.detail)
-                        .font(.system(size: 11))
+                        .font(.system(size: 11.5))
                         .foregroundColor(Theme.textSecondary)
                         .fixedSize(horizontal: false, vertical: true)
-
                     ForEach(recommendation.paths, id: \.self) { path in
-                        let displayPath = path.hasPrefix(model.homePath)
-                            ? "~" + path.dropFirst(model.homePath.count)
-                            : path
-                        Text(displayPath)
-                            .font(Theme.monoFont(size: 10))
-                            .foregroundColor(Theme.textTertiary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
+                        HStack(spacing: 6) {
+                            Text(path.hasPrefix(model.homePath) ? "~" + path.dropFirst(model.homePath.count) : path)
+                                .font(Theme.monoFont(size: 10.5))
+                                .foregroundColor(Theme.textTertiary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            if !model.isDemo {
+                                Image(systemName: "magnifyingglass")
+                                    .font(.system(size: 9.5))
+                                    .foregroundColor(Theme.textTertiary)
+                                    .onTapGesture { model.revealInFinder(path) }
+                                    .help("Reveal in Finder")
+                            }
+                        }
+                    }
+                    if case .shell(let cmd, _) = recommendation.command {
+                        Text("Uses: \(cmd)")
+                            .font(Theme.monoFont(size: 10.5))
+                            .foregroundColor(Theme.textSecondary)
+                            .lineLimit(2)
                     }
                 }
-                .padding(.horizontal, 44)
-                .padding(.bottom, 8)
+                .padding(.leading, 44)
+                .padding(.trailing, 16)
+                .padding(.bottom, 12)
             }
         }
     }
@@ -285,21 +250,19 @@ struct CustomCheckbox: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(isChecked ? Color.black : Color.white)
-                    .frame(width: 16, height: 16)
-                RoundedRectangle(cornerRadius: 4)
-                    .stroke(isChecked ? Color.clear : Theme.textTertiary, lineWidth: 1)
-                    .frame(width: 16, height: 16)
-                if isChecked {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundColor(.white)
-                }
+        ZStack {
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(isChecked ? Color(white: 0.07) : Color.white)
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .strokeBorder(isChecked ? Color.clear : Color(white: 0.82), lineWidth: 1)
+            if isChecked {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 9.5, weight: .bold))
+                    .foregroundColor(.white)
             }
         }
-        .buttonStyle(.plain)
+        .frame(width: 16, height: 16)
+        .contentShape(Rectangle())
+        .onTapGesture(perform: action)
     }
 }

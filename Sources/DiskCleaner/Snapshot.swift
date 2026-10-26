@@ -10,7 +10,32 @@ import AppKit
 @MainActor
 public struct SnapshotRenderer {
 
+    /// True when the process was launched with --snapshot / --snapshot-real.
+    public static var isActive = false
+
     public init() {}
+
+    /// Scan the real home folder of the current user and render it.
+    @available(macOS 13.0, *)
+    public func renderRealScan(to outputDir: String) async -> [String] {
+        let model = AppModel()
+        let start = Date()
+        await model.startScan()
+        let elapsed = Date().timeIntervalSince(start)
+        print(String(format: "Real scan: %@ in %d files, %.1fs, %d recommendations, %d unreadable paths",
+                     ByteFormatter.format(model.rootNode?.totalAllocatedSize ?? 0),
+                     model.rootNode?.fileCount ?? 0, elapsed,
+                     model.recommendations.count, model.deniedPaths.count))
+        for rec in model.recommendations {
+            print("  [\(rec.safety.rawValue)] \(rec.title) – \(ByteFormatter.format(rec.bytes)) – \(rec.displayPath)")
+        }
+        model.displayMode = .category
+        var paths: [String] = []
+        if let p = renderSnapshot(model: model, filename: "explorer-real.png", outputDir: outputDir) { paths.append(p) }
+        model.displayMode = .cleanup
+        if let p = renderSnapshot(model: model, filename: "explorer-real-cleanup.png", outputDir: outputDir) { paths.append(p) }
+        return paths
+    }
 
     /// Render demo screenshots to the specified output directory.
     /// - Parameter outputDir: Directory to write PNG files to.
@@ -34,6 +59,16 @@ public struct SnapshotRenderer {
             paths.append(path)
         }
 
+        // Drill-down: click on "Desktop"
+        model.displayMode = .category
+        if let desktop = model.rootNode?.children.first(where: { $0.name == "Desktop" }) {
+            model.navigateTo(node: desktop)
+            if let path = renderSnapshot(model: model, filename: "explorer-desktop.png", outputDir: outputDir) {
+                paths.append(path)
+            }
+            model.navigateToRoot()
+        }
+
         return paths
     }
 
@@ -43,7 +78,7 @@ public struct SnapshotRenderer {
             .environmentObject(model)
             .environment(\.isSnapshot, true)
             .environment(\.colorScheme, .light)
-            .frame(width: 1280, height: 820)
+            .frame(width: Theme.windowWidth, height: Theme.windowHeight)
 
         let renderer = ImageRenderer(content: view)
         renderer.scale = 2.0
