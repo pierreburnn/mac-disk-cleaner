@@ -196,28 +196,27 @@ public struct SnapshotRenderer {
         model.displayMode = .category
         if let root = model.rootNode,
            let desktop = root.children.first(where: { $0.name == "Desktop" }) {
-            // Compute the treemap size deterministically; fall back to a
-            // hard-coded estimate if lastTreemapSize was not populated by
-            // a prior render pass (ImageRenderer may not run onAppear).
-            let treemapSize: CGSize
-            if model.lastTreemapSize.width > 1 {
-                treemapSize = model.lastTreemapSize
-            } else {
-                treemapSize = CGSize(width: 768, height: 498)
-            }
-            // Find the Desktop tile rect in the root layout.
-            let rootItems = TreemapGeometry.items(for: root, in: treemapSize)
-            let desktopRect = rootItems.first(where: { $0.node === desktop })?.rect ?? CGRect(origin: .zero, size: treemapSize)
-
             model.navigateTo(node: desktop)
             model.zoomRequest = nil  // don't trigger live animation
+
+            // Intermediate frame at progress 0.55 into Desktop
             model.snapshotZoom = (
-                request: ZoomRequest(direction: .zoomIn, rect: desktopRect, node: desktop),
+                request: ZoomRequest(direction: .zoomIn, rect: .zero, node: desktop, parent: root),
                 progress: 0.55
             )
             if let path = renderSnapshot(model: model, filename: "explorer-zoom.png", outputDir: outputDir) {
                 paths.append(path)
             }
+
+            // Early frame at progress 0.25 into Desktop
+            model.snapshotZoom = (
+                request: ZoomRequest(direction: .zoomIn, rect: .zero, node: desktop, parent: root),
+                progress: 0.25
+            )
+            if let path = renderSnapshot(model: model, filename: "explorer-zoom-early.png", outputDir: outputDir) {
+                paths.append(path)
+            }
+
             model.snapshotZoom = nil
             model.navigateToRoot()
             model.zoomRequest = nil

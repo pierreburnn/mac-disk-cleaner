@@ -31,6 +31,16 @@ public struct ZoomRequest: Equatable {
     public let rect: CGRect
     /// Node drawn by the growing / shrinking tile.
     public let node: FileNode
+    /// Parent node before zoom (e.g. rootNode or currentNode).
+    public let parent: FileNode?
+
+    public init(direction: Direction, rect: CGRect, node: FileNode, parent: FileNode? = nil) {
+        self.direction = direction
+        self.rect = rect
+        self.node = node
+        self.parent = parent
+    }
+
     public static func == (a: ZoomRequest, b: ZoomRequest) -> Bool { a.id == b.id }
 }
 
@@ -221,7 +231,8 @@ extension AppModel {
         }
         clickMemo = nil
         guard node.isDirectory, !node.children.isEmpty else { return }
-        zoomRequest = ZoomRequest(direction: .zoomIn, rect: rect, node: node)
+        let parentNode = parent ?? currentNode
+        zoomRequest = ZoomRequest(direction: .zoomIn, rect: rect, node: node, parent: parentNode)
         if let parent { navigateTo(node: node, via: parent) } else { navigateTo(node: node) }
     }
 }

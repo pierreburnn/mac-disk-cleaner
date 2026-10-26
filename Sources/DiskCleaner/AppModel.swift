@@ -278,7 +278,7 @@ public final class AppModel: ObservableObject {
         let previous = currentNode
         breadcrumb = []
         if let previous, previous !== currentNode {
-            zoomRequest = ZoomRequest(direction: .zoomOut, rect: .zero, node: previous)
+            zoomRequest = ZoomRequest(direction: .zoomOut, rect: .zero, node: previous, parent: currentNode)
         }
     }
 
@@ -288,7 +288,7 @@ public final class AppModel: ObservableObject {
             breadcrumb = Array(breadcrumb.prefix(index + 1))
         }
         if let previous, previous !== currentNode {
-            zoomRequest = ZoomRequest(direction: .zoomOut, rect: .zero, node: previous)
+            zoomRequest = ZoomRequest(direction: .zoomOut, rect: .zero, node: previous, parent: currentNode)
         }
     }
 

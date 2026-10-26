@@ -3,116 +3,144 @@ import SwiftUI
 import AppKit
 import DiskCleanerCore
 
-/// One rectangle to draw. Computed up-front so the view tree stays flat and
-/// every tile is placed with `.position` in a top-leading coordinate space.
-struct TreemapTileItem: Identifiable {
-    enum Level { case top, inner }
-    let id: String
-    let node: FileNode?          // nil = "other" bucket (many tiny items)
-    let parent: FileNode?        // parent tile for inner items
-    let rect: CGRect
-    let level: Level
-    let showsChildren: Bool
-    /// For the "other" bucket: bytes and item count it stands for.
-    var aggregateBytes: Int64 = 0
-    var aggregateCount: Int = 0
-}
-
-enum TreemapGeometry {
-    static let outerGap: CGFloat = 3      // half of the 6 pt gap between top-level tiles
-    static let innerGap: CGFloat = 2      // half of the 4 pt gap between inner tiles
-    static let headerHeight: CGFloat = 25
-    static let innerPadding: CGFloat = 6
-
-    static func items(for node: FileNode, in size: CGSize) -> [TreemapTileItem] {
-        guard size.width > 1, size.height > 1 else { return [] }
-        var result: [TreemapTileItem] = []
-        let outer = TMRect(x: 0, y: 0, width: Double(size.width), height: Double(size.height))
-        let tops = TreemapLayout.layoutChildren(of: node, in: outer, minFraction: 0.002)
-        let topAgg = aggregate(of: node, shown: tops.compactMap(\.node))
-        for (i, top) in tops.enumerated() {
-            let r = inset(top.rect, outerGap)
-            guard r.width >= 2, r.height >= 2 else { continue }
-            let child = top.node
-            let canNest = child.map { $0.isDirectory && $0.children.count > 0 } ?? false
-                && r.width > 70 && r.height > 56
-            result.append(TreemapTileItem(id: "t\(i)-\(child?.id ?? "other")", node: child, parent: nil,
-                                          rect: r, level: .top, showsChildren: canNest,
-                                          aggregateBytes: child == nil ? topAgg.bytes : 0,
-                                          aggregateCount: child == nil ? topAgg.count : 0))
-            guard canNest, let child else { continue }
-            let innerArea = TMRect(x: Double(r.minX + innerPadding - innerGap),
-                                   y: Double(r.minY + headerHeight - innerGap),
-                                   width: Double(r.width - 2 * (innerPadding - innerGap)),
-                                   height: Double(r.height - headerHeight - innerPadding + 2 * innerGap))
-            guard innerArea.width > 8, innerArea.height > 8 else { continue }
-            let inners = TreemapLayout.layoutChildren(of: child, in: innerArea, minFraction: 0.004)
-            let innerAgg = aggregate(of: child, shown: inners.compactMap(\.node))
-            for (j, inner) in inners.enumerated() {
-                let ir = inset(inner.rect, innerGap)
-                // Skip hairline slivers: they read as stray stripes, not tiles.
-                guard ir.width >= 6, ir.height >= 6 else { continue }
-                result.append(TreemapTileItem(id: "t\(i)-\(j)-\(inner.node?.id ?? "other")", node: inner.node,
-                                              parent: child, rect: ir, level: .inner, showsChildren: false,
-                                              aggregateBytes: inner.node == nil ? innerAgg.bytes : 0,
-                                              aggregateCount: inner.node == nil ? innerAgg.count : 0))
-            }
-        }
-        return result
-    }
-
-    /// What the "other" bucket of `node` stands for, given the children drawn individually.
-    static func aggregate(of node: FileNode, shown: [FileNode]) -> (bytes: Int64, count: Int) {
-        let shownBytes = shown.reduce(Int64(0)) { $0 + max(0, $1.totalAllocatedSize) }
-        let bytes = max(0, node.totalAllocatedSize - shownBytes)
-        let count = max(0, node.children.count - shown.count) + node.mergedFileCount
-        return (bytes, count)
-    }
-
-    private static func inset(_ r: TMRect, _ d: CGFloat) -> CGRect {
-        CGRect(x: CGFloat(r.x) + d, y: CGFloat(r.y) + d,
-               width: max(0, CGFloat(r.width) - 2 * d), height: max(0, CGFloat(r.height) - 2 * d))
-    }
-}
-
 // MARK: - Layout cache (avoid recomputing items during animation)
 
-/// Caches the last `TreemapGeometry.items(for:in:)` result so that body
+/// Caches `TreemapGeometry.items(for:in:)` results so that body
 /// re-evaluations triggered by the zoom animation state don't re-run the
-/// expensive layout algorithm.  Keyed by (node identity, rounded size,
-/// treeRevision).
+/// expensive layout algorithm. Keyed by (node identity, rounded size, treeRevision).
 final class TreemapItemsCache {
-    private var nodeID: ObjectIdentifier?
-    private var roundedWidth: CGFloat = 0
-    private var roundedHeight: CGFloat = 0
-    private var revision: Int = -1
-    private(set) var items: [TreemapTileItem] = []
+    private struct Key: Hashable {
+        let nodeID: ObjectIdentifier
+        let roundedWidth: CGFloat
+        let roundedHeight: CGFloat
+        let revision: Int
+    }
+    private var storage: [Key: [TreemapTileItem]] = [:]
 
     /// Returns cached items or recomputes them.
     func get(for node: FileNode, in size: CGSize, revision rev: Int) -> [TreemapTileItem] {
         let rw = (size.width * 2).rounded(.down) / 2
         let rh = (size.height * 2).rounded(.down) / 2
-        let nid = ObjectIdentifier(node)
-        if nid == nodeID, rw == roundedWidth, rh == roundedHeight, rev == revision {
-            return items
+        let key = Key(nodeID: ObjectIdentifier(node), roundedWidth: rw, roundedHeight: rh, revision: rev)
+        if let cached = storage[key] {
+            return cached
         }
         let result = TreemapGeometry.items(for: node, in: size)
-        nodeID = nid
-        roundedWidth = rw
-        roundedHeight = rh
-        revision = rev
-        items = result
+        storage[key] = result
         return result
     }
 }
 
-// MARK: - CGRect interpolation helper
+/// Internal state for an in-flight zoom animation.
+private struct ZoomActiveState {
+    let id: UUID
+    let direction: ZoomRequest.Direction
+    let startRect: CGRect
+    let endRect: CGRect
+    let childItems: [TreemapTileItem]
+    let parentItems: [TreemapTileItem]
+    let category: NodeCategory
+}
 
-private func interpolateRect(_ a: CGRect, _ b: CGRect, t: CGFloat) -> CGRect {
-    CGRect(x: a.minX + (b.minX - a.minX) * t,
-           y: a.minY + (b.minY - a.minY) * t,
-           width: a.width + (b.width - a.width) * t,
-           height: a.height + (b.height - a.height) * t)
+/// Scaled tiles overlay conforming to Animatable so that SwiftUI interpolates
+/// `progress` smoothly on each frame.
+private struct ZoomingTileOverlay: View, Animatable {
+    var progress: CGFloat
+    let zoom: ZoomActiveState
+    let fullBounds: CGRect
+
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
+
+    var body: some View {
+        let p = min(max(progress, 0), 1)
+        let currentFrame = ZoomGeometry.frame(from: zoom.startRect, to: zoom.endRect, progress: p)
+
+        if zoom.direction == .zoomIn {
+            // During zoom-in:
+            // Underneath: parent tiles are drawn.
+            // On top: growing folder tile background and scaled children fading in from 0.6 to 1 opacity.
+            let contentOpacity = 0.6 + 0.4 * Double(p)
+
+            ZStack(alignment: .topLeading) {
+                if !zoom.parentItems.isEmpty {
+                    ForEach(zoom.parentItems) { item in
+                        TreemapTile(item: item)
+                            .frame(width: max(0, item.rect.width), height: max(0, item.rect.height))
+                            .position(x: item.rect.midX, y: item.rect.midY)
+                    }
+                }
+
+                RoundedRectangle(cornerRadius: Theme.tileRadius, style: .continuous)
+                    .fill(Theme.tileFill(for: zoom.category))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.tileRadius, style: .continuous)
+                            .strokeBorder(Theme.tileBorder(for: zoom.category), lineWidth: 1)
+                    )
+                    .frame(width: max(0, currentFrame.width), height: max(0, currentFrame.height))
+                    .position(x: currentFrame.midX, y: currentFrame.midY)
+
+                ForEach(zoom.childItems) { item in
+                    let mappedRect = ZoomGeometry.map(item.rect, from: fullBounds, into: currentFrame)
+                    if mappedRect.width >= 1 && mappedRect.height >= 1 {
+                        let mappedItem = TreemapTileItem(
+                            id: "anim-\(item.id)",
+                            node: item.node,
+                            parent: item.parent,
+                            rect: mappedRect,
+                            level: item.level,
+                            showsChildren: item.showsChildren,
+                            aggregateBytes: item.aggregateBytes,
+                            aggregateCount: item.aggregateCount
+                        )
+                        TreemapTile(item: mappedItem)
+                            .frame(width: mappedRect.width, height: mappedRect.height)
+                            .position(x: mappedRect.midX, y: mappedRect.midY)
+                    }
+                }
+                .opacity(contentOpacity)
+            }
+            .allowsHitTesting(false)
+        } else {
+            // During zoom-out:
+            // Previous child layout shrinks into destRect and fades out from 1 to 0 opacity.
+            let overlayOpacity = max(0, 1.0 - Double(p))
+
+            ZStack(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: Theme.tileRadius, style: .continuous)
+                    .fill(Theme.tileFill(for: zoom.category))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: Theme.tileRadius, style: .continuous)
+                            .strokeBorder(Theme.tileBorder(for: zoom.category), lineWidth: 1)
+                    )
+                    .frame(width: max(0, currentFrame.width), height: max(0, currentFrame.height))
+                    .position(x: currentFrame.midX, y: currentFrame.midY)
+
+                ForEach(zoom.childItems) { item in
+                    let mappedRect = ZoomGeometry.map(item.rect, from: fullBounds, into: currentFrame)
+                    if mappedRect.width >= 1 && mappedRect.height >= 1 {
+                        let mappedItem = TreemapTileItem(
+                            id: "anim-out-\(item.id)",
+                            node: item.node,
+                            parent: item.parent,
+                            rect: mappedRect,
+                            level: item.level,
+                            showsChildren: item.showsChildren,
+                            aggregateBytes: item.aggregateBytes,
+                            aggregateCount: item.aggregateCount
+                        )
+                        TreemapTile(item: mappedItem)
+                            .frame(width: mappedRect.width, height: mappedRect.height)
+                            .position(x: mappedRect.midX, y: mappedRect.midY)
+                    }
+                }
+            }
+            .opacity(overlayOpacity)
+            .allowsHitTesting(false)
+        }
+    }
 }
 
 struct TreemapView: View {
@@ -123,52 +151,38 @@ struct TreemapView: View {
     @State private var cache = TreemapItemsCache()
 
     // Zoom animation state
-    @State private var zoomOverlay: ZoomOverlayState?
+    @State private var activeZoom: ZoomActiveState?
+    @State private var zoomProgress: CGFloat = 0
     @State private var tilesOpacity: Double = 1
-    @State private var overlayOpacity: Double = 1
-    @State private var overlayRect: CGRect = .zero
     @State private var activeZoomID: UUID?
 
     var body: some View {
         GeometryReader { geo in
             let _ = model.treeRevision
             let items = cache.get(for: node, in: geo.size, revision: model.treeRevision)
-            // In snapshot mode with a zoom-in overlay in progress, hide the tiles.
-            let snapshotHidesTiles: Bool = isSnapshot
-                && model.snapshotZoom != nil
-                && model.snapshotZoom!.request.direction == .zoomIn
-                && model.snapshotZoom!.progress < 1
-            let effectiveTilesOpacity = snapshotHidesTiles ? 0.0 : tilesOpacity
+            let isSnapshotZooming = isSnapshot && model.snapshotZoom != nil
+
             ZStack(alignment: .topLeading) {
                 Color.clear
-                ForEach(items) { item in
-                    TreemapTile(item: item)
-                        .frame(width: item.rect.width, height: item.rect.height)
-                        .position(x: item.rect.midX, y: item.rect.midY)
-                }
-                .opacity(effectiveTilesOpacity)
 
-                // Zoom overlay (animated or snapshot-static)
-                if let overlay = effectiveOverlay(geo: geo) {
-                    let r = overlay.rect
-                    RoundedRectangle(cornerRadius: Theme.tileRadius, style: .continuous)
-                        .fill(overlay.fill)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: Theme.tileRadius, style: .continuous)
-                                .strokeBorder(overlay.border, lineWidth: 1)
-                        )
-                        .overlay(alignment: .topLeading) {
-                            Text(overlay.name)
-                                .font(.system(size: 12, weight: .medium))
-                                .foregroundColor(Theme.textPrimary)
-                                .lineLimit(1)
-                                .padding(.horizontal, 7)
-                                .padding(.top, 6)
-                        }
-                        .frame(width: r.width, height: r.height)
-                        .position(x: r.midX, y: r.midY)
-                        .opacity(overlay.opacity)
-                        .allowsHitTesting(false)
+                // Base treemap tiles (hidden during snapshot zoom, or animated during live zoom)
+                if !isSnapshotZooming {
+                    ForEach(items) { item in
+                        TreemapTile(item: item)
+                            .frame(width: item.rect.width, height: item.rect.height)
+                            .position(x: item.rect.midX, y: item.rect.midY)
+                    }
+                    .opacity(tilesOpacity)
+                }
+
+                // Snapshot static overlay
+                if isSnapshot, let snap = model.snapshotZoom {
+                    snapshotOverlay(snap: snap, size: geo.size)
+                }
+
+                // Live animation overlay
+                if !isSnapshot, let zoom = activeZoom {
+                    ZoomingTileOverlay(progress: zoomProgress, zoom: zoom, fullBounds: CGRect(origin: .zero, size: geo.size))
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
@@ -190,46 +204,44 @@ struct TreemapView: View {
         }
     }
 
-    // MARK: - Snapshot / live overlay
+    // MARK: - Snapshot overlay
 
-    /// In snapshot mode, use `model.snapshotZoom` to produce a static overlay.
-    /// In live mode, use the animated `zoomOverlay` state.
-    private func effectiveOverlay(geo: GeometryProxy) -> ZoomOverlayRendered? {
-        if isSnapshot, let snap = model.snapshotZoom {
-            let bounds = CGRect(origin: .zero, size: geo.size)
-            let req = snap.request
-            let cat = req.node.category
-            let startRect: CGRect
-            let endRect: CGRect
-            if req.direction == .zoomIn {
+    @ViewBuilder
+    private func snapshotOverlay(snap: (request: ZoomRequest, progress: CGFloat), size: CGSize) -> some View {
+        let req = snap.request
+        let parent = req.parent ?? model.rootNode
+        let fullBounds = CGRect(origin: .zero, size: size)
+        let startRect: CGRect
+        let endRect: CGRect
+
+        if req.direction == .zoomIn {
+            if let parent, let calculated = ZoomGeometry.startRect(of: req.node, in: parent, size: size) {
+                startRect = calculated
+            } else if req.rect != .zero {
                 startRect = req.rect
-                endRect = bounds
             } else {
-                startRect = bounds
-                endRect = req.rect == .zero ? bounds : req.rect
+                startRect = fullBounds
             }
-            let r = interpolateRect(startRect, endRect, t: snap.progress)
-            // Children hidden when progress < 1 for zoom-in
-            if req.direction == .zoomIn, snap.progress < 1 {
-                // We cannot set @State from here; the caller should handle tilesOpacity
-                // For snapshot just render with opacity embedded
-            }
-            return ZoomOverlayRendered(
-                rect: r,
-                fill: Theme.tileFill(for: cat),
-                border: Theme.tileBorder(for: cat),
-                name: req.node.name,
-                opacity: 1
-            )
+            endRect = fullBounds
+        } else {
+            startRect = fullBounds
+            endRect = (parent != nil ? ZoomGeometry.startRect(of: req.node, in: parent!, size: size) : nil)
+                ?? (req.rect != .zero ? req.rect : fullBounds)
         }
-        guard let overlay = zoomOverlay else { return nil }
-        return ZoomOverlayRendered(
-            rect: overlayRect,
-            fill: overlay.fill,
-            border: overlay.border,
-            name: overlay.name,
-            opacity: overlayOpacity
+
+        let childItems = cache.get(for: req.node, in: size, revision: model.treeRevision)
+        let parentItems = parent != nil ? cache.get(for: parent!, in: size, revision: model.treeRevision) : []
+
+        let zoomState = ZoomActiveState(
+            id: req.id,
+            direction: req.direction,
+            startRect: startRect,
+            endRect: endRect,
+            childItems: childItems,
+            parentItems: parentItems,
+            category: req.node.category
         )
+        ZoomingTileOverlay(progress: snap.progress, zoom: zoomState, fullBounds: fullBounds)
     }
 
     // MARK: - Zoom animation
@@ -249,64 +261,75 @@ struct TreemapView: View {
         }
 
         let bounds = CGRect(origin: .zero, size: size)
-        let cat = request.node.category
-
-        let overlay = ZoomOverlayState(
-            fill: Theme.tileFill(for: cat),
-            border: Theme.tileBorder(for: cat),
-            name: request.node.name
-        )
 
         switch request.direction {
         case .zoomIn:
-            zoomOverlay = overlay
-            overlayRect = request.rect
-            overlayOpacity = 1
+            let parent = request.parent ?? model.rootNode
+            let startRect: CGRect
+            if let parent, let calculated = ZoomGeometry.startRect(of: request.node, in: parent, size: size) {
+                startRect = calculated
+            } else if request.rect != .zero {
+                startRect = request.rect
+            } else {
+                startRect = bounds
+            }
+            let endRect = bounds
+            let childItems = cache.get(for: request.node, in: size, revision: model.treeRevision)
+            let parentItems = parent != nil ? cache.get(for: parent!, in: size, revision: model.treeRevision) : []
+
+            activeZoom = ZoomActiveState(
+                id: requestID,
+                direction: .zoomIn,
+                startRect: startRect,
+                endRect: endRect,
+                childItems: childItems,
+                parentItems: parentItems,
+                category: request.node.category
+            )
+            zoomProgress = 0
             tilesOpacity = 0
 
             withAnimation(.easeInOut(duration: 0.35)) {
-                overlayRect = bounds
+                zoomProgress = 1
             }
-            // After grow finishes, fade in children and fade out overlay
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                 guard activeZoomID == requestID else { return }
-                withAnimation(.easeOut(duration: 0.18)) {
-                    tilesOpacity = 1
-                    overlayOpacity = 0
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-                    guard activeZoomID == requestID else { return }
-                    zoomOverlay = nil
-                    overlayOpacity = 1
-                    model.zoomRequest = nil
-                }
+                tilesOpacity = 1
+                activeZoom = nil
+                model.zoomRequest = nil
             }
 
         case .zoomOut:
             // Find the destination tile rect in the new layout
-            let items = cache.get(for: node, in: size, revision: model.treeRevision)
-            let destRect = findTileRect(for: request.node, in: items) ?? bounds
+            let parent = node
+            let destRect = ZoomGeometry.startRect(of: request.node, in: parent, size: size)
+                ?? findTileRect(for: request.node, in: cache.get(for: parent, in: size, revision: model.treeRevision))
+                ?? bounds
 
-            zoomOverlay = overlay
-            overlayRect = bounds
-            overlayOpacity = 1
+            let childItems = cache.get(for: request.node, in: size, revision: model.treeRevision)
+            let parentItems = cache.get(for: parent, in: size, revision: model.treeRevision)
+
+            activeZoom = ZoomActiveState(
+                id: requestID,
+                direction: .zoomOut,
+                startRect: bounds,
+                endRect: destRect,
+                childItems: childItems,
+                parentItems: parentItems,
+                category: request.node.category
+            )
+            zoomProgress = 0
             tilesOpacity = 0
 
             withAnimation(.easeInOut(duration: 0.35)) {
-                overlayRect = destRect
+                zoomProgress = 1
                 tilesOpacity = 1
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
                 guard activeZoomID == requestID else { return }
-                withAnimation(.easeOut(duration: 0.12)) {
-                    overlayOpacity = 0
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
-                    guard activeZoomID == requestID else { return }
-                    zoomOverlay = nil
-                    overlayOpacity = 1
-                    model.zoomRequest = nil
-                }
+                tilesOpacity = 1
+                activeZoom = nil
+                model.zoomRequest = nil
             }
         }
     }
@@ -330,22 +353,6 @@ struct TreemapView: View {
         }
         return bestMatch
     }
-}
-
-/// Internal state for the zoom overlay tile.
-private struct ZoomOverlayState {
-    let fill: Color
-    let border: Color
-    let name: String
-}
-
-/// Resolved overlay for rendering.
-private struct ZoomOverlayRendered {
-    let rect: CGRect
-    let fill: Color
-    let border: Color
-    let name: String
-    let opacity: Double
 }
 
 // MARK: - Tile
