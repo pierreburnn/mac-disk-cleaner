@@ -170,13 +170,13 @@ struct TreemapTile: View {
                 if w > 44 && h > 18 {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         Text(node.name)
-                            .font(.system(size: 12.5, weight: .medium))
+                            .font(.system(size: 12, weight: .medium))
                             .foregroundColor(Theme.textPrimary)
                             .lineLimit(1)
                             .truncationMode(.tail)
                             .layoutPriority(1)
                         Spacer(minLength: 0)
-                        if w > 96 {
+                        if w > 112 {
                             Text(size)
                                 .font(Theme.monoFont(size: 11))
                                 .foregroundColor(Theme.textSecondary)
@@ -184,7 +184,7 @@ struct TreemapTile: View {
                                 .fixedSize()
                         }
                     }
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, 7)
                     .padding(.top, 6)
                 }
                 Spacer(minLength: 0)
