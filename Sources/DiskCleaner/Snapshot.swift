@@ -246,6 +246,15 @@ public struct SnapshotRenderer {
             if let path = renderSnapshot(model: model, filename: "explorer-selected.png", outputDir: outputDir) {
                 paths.append(path)
             }
+            if let desktop = root.children.first(where: { $0.name == "Desktop" }) {
+                model.navigateTo(node: desktop)
+                model.zoomRequest = nil
+                if let path = renderSnapshot(model: model, filename: "explorer-selected-desktop.png", outputDir: outputDir) {
+                    paths.append(path)
+                }
+                model.navigateToRoot()
+                model.zoomRequest = nil
+            }
             model.requestTrashSelection()
             if model.pendingPlan == nil {
                 model.pendingPlan = PendingTrash(entries: model.selectionEntries, plan: model.selectionPlan)

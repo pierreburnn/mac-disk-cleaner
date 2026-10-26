@@ -52,7 +52,7 @@ struct SelectionInfo: View {
                     let bytes = SelectionPlanner.plan(
                         entries: model.explorerItems.compactMap { $0.node.map(SelectionEntry.tile) },
                         root: model.rootNode, policy: model.deletionPolicy).selectedBytes
-                    Text("\(count) tuiles sélectionnées")
+                    Text(selectionTitle(count: count))
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(Theme.textPrimary)
                         .lineLimit(1)
@@ -67,6 +67,32 @@ struct SelectionInfo: View {
                     .fixedSize()
             }
         }
+    }
+
+    private func selectionTitle(count: Int) -> String {
+        let base = "\(count) tuiles sélectionnées"
+        guard let node = model.currentNode, !model.explorerSelection.isEmpty else {
+            return base
+        }
+        let size = model.lastTreemapSize.width > 1 ? model.lastTreemapSize : CGSize(width: 768, height: 498)
+        let items = TreemapGeometry.items(for: node, in: size)
+        let selectedPaths = model.explorerSelection.checkedPaths
+        let detailed = SelectionMarks.marks(items: items, selectedPaths: selectedPaths, displayedNodePath: node.url.path)
+        let direct = detailed.values.filter(\.direct).count
+        let hidden = detailed.values.reduce(0) { $0 + $1.hiddenCount }
+        let outside = max(0, selectedPaths.count - (direct + hidden))
+
+        var details: [String] = []
+        if hidden > 0 {
+            details.append(hidden == 1 ? "1 dans un dossier réduit" : "\(hidden) dans des dossiers réduits")
+        }
+        if outside > 0 {
+            details.append(outside == 1 ? "1 hors de ce dossier" : "\(outside) hors de ce dossier")
+        }
+        if details.isEmpty {
+            return base
+        }
+        return "\(base) (\(details.joined(separator: ", ")))"
     }
 }
 
@@ -171,7 +197,7 @@ struct TrashConfirmationOverlay: View {
     private func list(_ pending: PendingTrash) -> some View {
         let content = VStack(alignment: .leading, spacing: 0) {
             ForEach(pending.plan.targets, id: \.path) { t in
-                row(title: title(for: t, in: pending), path: t.path, bytes: t.bytes, refused: nil)
+                row(title: title(for: t, in: pending), path: model.displayPath(t.path), bytes: t.bytes, refused: nil)
             }
             if !pending.plan.refused.isEmpty {
                 Text("Ignorés (protégés ou hors du dossier personnel)")
@@ -180,7 +206,7 @@ struct TrashConfirmationOverlay: View {
                     .padding(.horizontal, 10)
                     .frame(height: 34, alignment: .bottomLeading)
                 ForEach(pending.plan.refused, id: \.path) { r in
-                    row(title: (r.path as NSString).lastPathComponent, path: r.path, bytes: r.bytes,
+                    row(title: (r.path as NSString).lastPathComponent, path: model.displayPath(r.path), bytes: r.bytes,
                         refused: r.refusal.frenchDescription)
                 }
             }

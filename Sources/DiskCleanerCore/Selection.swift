@@ -122,6 +122,16 @@ public enum SelectionPlanner {
         }
         return plan
     }
+
+    /// Formats the panel footer selection count: "N items" or "N items · M chemins" if different.
+    public static func footerSelectionSummary(itemCount: Int, targetCount: Int) -> String {
+        let items = itemCount == 1 ? "1 item" : "\(itemCount) items"
+        if targetCount > 0 && targetCount != itemCount {
+            let chemins = targetCount == 1 ? "1 chemin" : "\(targetCount) chemins"
+            return "\(items) · \(chemins)"
+        }
+        return items
+    }
 }
 
 // MARK: - Batch move to Trash

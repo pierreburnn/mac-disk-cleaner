@@ -116,7 +116,7 @@ struct RecommendationsPanel: View {
                 Text(ByteFormatter.format(model.selectedBytes))
                     .font(Theme.monoFont(size: 13, weight: .bold))
                     .foregroundColor(Theme.textPrimary)
-                Text("selected · \(StatsRow.items(model.selectedCount))")
+                Text("selected · \(SelectionPlanner.footerSelectionSummary(itemCount: model.selectedCount, targetCount: model.trashCount))")
                     .font(.system(size: 12.5))
                     .foregroundColor(Theme.textSecondary)
                 Spacer()

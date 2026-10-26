@@ -8,6 +8,8 @@ import DiskCleanerCore
 /// Caches `TreemapGeometry.items(for:in:)` results so that body
 /// re-evaluations triggered by the zoom animation state don't re-run the
 /// expensive layout algorithm. Keyed by (node identity, rounded size, treeRevision).
+/// Stores up to 4 entries to avoid cache thrashing when both the child and
+/// parent node need items in the same frame (snapshot overlay, zoom animation).
 final class TreemapItemsCache {
     private struct Key: Hashable {
         let nodeID: ObjectIdentifier
@@ -15,18 +17,26 @@ final class TreemapItemsCache {
         let roundedHeight: CGFloat
         let revision: Int
     }
-    private var storage: [Key: [TreemapTileItem]] = [:]
+    private struct Entry {
+        let key: Key
+        let items: [TreemapTileItem]
+    }
+    private var entries: [Entry] = []
+    private let maxEntries = 8
 
     /// Returns cached items or recomputes them.
     func get(for node: FileNode, in size: CGSize, revision rev: Int) -> [TreemapTileItem] {
         let rw = (size.width * 2).rounded(.down) / 2
         let rh = (size.height * 2).rounded(.down) / 2
         let key = Key(nodeID: ObjectIdentifier(node), roundedWidth: rw, roundedHeight: rh, revision: rev)
-        if let cached = storage[key] {
-            return cached
+        if let idx = entries.firstIndex(where: { $0.key == key }) {
+            let entry = entries.remove(at: idx)
+            entries.append(entry)
+            return entry.items
         }
         let result = TreemapGeometry.items(for: node, in: size)
-        storage[key] = result
+        if entries.count >= maxEntries { entries.removeFirst() }
+        entries.append(Entry(key: key, items: result))
         return result
     }
 }
@@ -161,6 +171,11 @@ struct TreemapView: View {
             let _ = model.treeRevision
             let items = cache.get(for: node, in: geo.size, revision: model.treeRevision)
             let isSnapshotZooming = isSnapshot && model.snapshotZoom != nil
+            let marks = SelectionMarks.marks(
+                items: items,
+                selectedPaths: model.explorerSelection.checkedPaths,
+                displayedNodePath: node.url.path
+            )
 
             ZStack(alignment: .topLeading) {
                 Color.clear
@@ -168,7 +183,7 @@ struct TreemapView: View {
                 // Base treemap tiles (hidden during snapshot zoom, or animated during live zoom)
                 if !isSnapshotZooming {
                     ForEach(items) { item in
-                        TreemapTile(item: item)
+                        TreemapTile(item: item, mark: marks[item.id])
                             .frame(width: item.rect.width, height: item.rect.height)
                             .position(x: item.rect.midX, y: item.rect.midY)
                     }
@@ -206,8 +221,14 @@ struct TreemapView: View {
 
     // MARK: - Snapshot overlay
 
-    @ViewBuilder
-    private func snapshotOverlay(snap: (request: ZoomRequest, progress: CGFloat), size: CGSize) -> some View {
+    private func snapshotOverlay(snap: (request: ZoomRequest, progress: CGFloat), size: CGSize) -> ZoomingTileOverlay {
+        let zoomState = snapshotZoomState(snap: snap, size: size)
+        return ZoomingTileOverlay(progress: snap.progress, zoom: zoomState, fullBounds: CGRect(origin: .zero, size: size))
+    }
+
+    /// Builds the zoom state for a snapshot overlay. This is a plain function
+    /// (not @ViewBuilder) so that `let` + `if/else` assignments compile.
+    private func snapshotZoomState(snap: (request: ZoomRequest, progress: CGFloat), size: CGSize) -> ZoomActiveState {
         let req = snap.request
         let parent = req.parent ?? model.rootNode
         let fullBounds = CGRect(origin: .zero, size: size)
@@ -232,7 +253,7 @@ struct TreemapView: View {
         let childItems = cache.get(for: req.node, in: size, revision: model.treeRevision)
         let parentItems = parent != nil ? cache.get(for: parent!, in: size, revision: model.treeRevision) : []
 
-        let zoomState = ZoomActiveState(
+        return ZoomActiveState(
             id: req.id,
             direction: req.direction,
             startRect: startRect,
@@ -241,7 +262,6 @@ struct TreemapView: View {
             parentItems: parentItems,
             category: req.node.category
         )
-        ZoomingTileOverlay(progress: snap.progress, zoom: zoomState, fullBounds: fullBounds)
     }
 
     // MARK: - Zoom animation
@@ -359,6 +379,7 @@ struct TreemapView: View {
 
 struct TreemapTile: View {
     let item: TreemapTileItem
+    var mark: SelectionMark?
     @EnvironmentObject var model: AppModel
     @State private var hovered = false
 
@@ -433,12 +454,65 @@ struct TreemapTile: View {
             if let node = item.node {
                 labels(node: node, w: w, h: h).opacity(textOpacity)
             }
-            if isSelected {
-                RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .strokeBorder(Theme.selectionColor, lineWidth: 2)
-                RoundedRectangle(cornerRadius: max(0, radius - 2), style: .continuous)
-                    .strokeBorder(Color.white.opacity(0.85), lineWidth: 1)
-                    .padding(2)
+            // Selection outlines: direct, indirect (hidden descendants), or none
+            if let mark {
+                if mark.direct || mark.hiddenCount > 0 {
+                    let isSmall = isNameHidden(w: w, h: h)
+                    if mark.direct {
+                        if isSmall {
+                            // Small selected tile: tinted fill + thicker outline, no inner stroke
+                            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                                .fill(Theme.selectionColor.opacity(0.18))
+                            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                                .strokeBorder(Theme.selectionColor, lineWidth: 3)
+                        } else {
+                            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                                .strokeBorder(Theme.selectionColor, lineWidth: 2.5)
+                            RoundedRectangle(cornerRadius: max(0, radius - 2.5), style: .continuous)
+                                .strokeBorder(Color.white.opacity(0.85), lineWidth: 1)
+                                .padding(2.5)
+                        }
+                    }
+                    if mark.hiddenCount > 0 && !mark.direct {
+                        // Dashed outline for tiles containing hidden selected descendants
+                        RoundedRectangle(cornerRadius: radius, style: .continuous)
+                            .strokeBorder(Theme.selectionColor,
+                                          style: StrokeStyle(lineWidth: 2, dash: [4, 3]))
+                    }
+                    if mark.hiddenCount > 0 {
+                        // Small blue badge with hidden count in top-right corner
+                        if w > 20 && h > 16 {
+                            HStack {
+                                Spacer(minLength: 0)
+                                Text("\(mark.hiddenCount)")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 1)
+                                    .background(
+                                        Capsule().fill(Theme.selectionColor)
+                                    )
+                            }
+                            .padding(.top, 3)
+                            .padding(.trailing, 3)
+                        }
+                    }
+                }
+            } else if isSelected {
+                // Fallback: direct selection via model (e.g. in animation overlays)
+                let isSmall = isNameHidden(w: w, h: h)
+                if isSmall {
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .fill(Theme.selectionColor.opacity(0.18))
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .strokeBorder(Theme.selectionColor, lineWidth: 3)
+                } else {
+                    RoundedRectangle(cornerRadius: radius, style: .continuous)
+                        .strokeBorder(Theme.selectionColor, lineWidth: 2.5)
+                    RoundedRectangle(cornerRadius: max(0, radius - 2.5), style: .continuous)
+                        .strokeBorder(Color.white.opacity(0.85), lineWidth: 1)
+                        .padding(2.5)
+                }
             }
         }
         .contentShape(Rectangle())
@@ -449,6 +523,15 @@ struct TreemapTile: View {
         .gesture(TapGesture(count: 2).onEnded { enter() })
         .simultaneousGesture(TapGesture(count: 1).onEnded { select() })
         .help(helpText)
+    }
+
+    private func isNameHidden(w: CGFloat, h: CGFloat) -> Bool {
+        if item.node == nil { return true }
+        if isTop {
+            return !(w > 44 && h > 18)
+        } else {
+            return !(w > 56 && h > 26)
+        }
     }
 
     private var isSelected: Bool { model.isInSelection(item.node) }

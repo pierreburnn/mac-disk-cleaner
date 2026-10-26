@@ -118,15 +118,15 @@ extension AppModel {
 
     // MARK: Delete button
 
-    /// Number shown in « Supprimer (N) »: ticked lines of the panel.
-    public var trashCount: Int { selectedCount }
+    /// Number shown in « Supprimer (N) »: real deduplicated paths that will be moved to the Trash.
+    public var trashCount: Int { selectionPlan.targets.count }
 
     public var trashDisabledReason: String? {
         if selectedCount == 0 { return "Rien n’est coché : cliquez des tuiles ou cochez des recommandations." }
+        if selectionPlan.targets.isEmpty { return "Aucun des éléments cochés ne peut être mis à la Corbeille (dossiers protégés ou hors du dossier personnel)." }
         if previewTrashEnabled { return nil }
         if isDemo { return DeletionRefusal.demoMode.frenchDescription }
         if isScanning || isTrashing { return "Opération en cours…" }
-        if selectionPlan.targets.isEmpty { return "Aucun des éléments cochés ne peut être mis à la Corbeille (dossiers protégés ou hors du dossier personnel)." }
         return nil
     }
 
@@ -134,7 +134,7 @@ extension AppModel {
 
     public func displayPath(_ path: String) -> String {
         let home = homePath
-        if path == home { return "~" }
+        if path == home || path == home + "/" { return "~" }
         if path.hasPrefix(home + "/") { return "~" + path.dropFirst(home.count) }
         return path
     }
