@@ -8,6 +8,14 @@
 
 ![Vue Nettoyage](docs/screenshots/explorer-cleanup.png)
 
+*Zoom sur un dossier (clic sur la tuile « Desktop ») :*
+
+![Zoom Desktop](docs/screenshots/explorer-desktop.png)
+
+*Analyse réelle (dossier personnel du Mac de la CI GitHub, aucune donnée de démo) :*
+
+![Analyse réelle](docs/screenshots/explorer-real.png)
+
 *(Captures générées automatiquement par la CI en mode démo, avec des données fictives.)*
 
 ## Téléchargement
@@ -37,7 +45,7 @@ L'application est signée « ad hoc » mais n'est pas notariée par Apple : Gate
 
 ### Accès complet au disque (recommandé)
 
-Certains dossiers (Mail, Messages, Safari, conteneurs d'apps…) sont protégés par macOS. Si l'analyse n'a pas pu les lire, un bandeau s'affiche avec un bouton **Ouvrir les réglages** qui mène directement à **Réglages Système › Confidentialité et sécurité › Accès complet au disque**. Ajoutez‑y *Disk Cleaner*, puis relancez l'analyse.
+Certains dossiers (Mail, Messages, Safari, conteneurs d'apps…) sont protégés par macOS. Si l'analyse n'a pas pu les lire, un bandeau s'affiche avec un bouton **Open Full Disk Access settings** qui mène directement à **Réglages Système › Confidentialité et sécurité › Accès complet au disque**. Ajoutez‑y *Disk Cleaner*, puis relancez l'analyse (bouton **Rescan**).
 
 ## Utilisation
 
@@ -88,6 +96,7 @@ scripts/build_app.sh 1.0.0  # .app universelle signée ad hoc + .dmg dans dist/
 ```
 
 Captures d'écran en mode démo : `"dist/Disk Cleaner.app/Contents/MacOS/DiskCleaner" --snapshot ./screenshots`.
+Capture d'une vraie analyse de votre dossier personnel : `… --snapshot-real ./screenshots`.
 
 Le mode démo (`--demo` ou variable d'environnement `DISK_CLEANER_DEMO=1`) sert uniquement aux captures ; en mode normal, toutes les données viennent de l'analyse réelle.
 

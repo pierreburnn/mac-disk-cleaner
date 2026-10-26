@@ -28,8 +28,14 @@ struct RecommendationsPanel: View {
             // Scrollable list; the footer below stays pinned.
             Group {
                 if isSnapshot {
-                    VStack(spacing: 0) { listContent }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                    // ImageRenderer cannot draw a ScrollView; an overlay keeps the
+                    // list from influencing the panel height (it is simply clipped).
+                    Color.clear
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .overlay(alignment: .top) {
+                            VStack(spacing: 0) { listContent }
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         .clipped()
                 } else {
                     ScrollView(.vertical) {
