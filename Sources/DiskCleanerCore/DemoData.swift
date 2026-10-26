@@ -119,11 +119,11 @@ public struct DemoData: Sendable {
             ])
         }
 
-        let proj1 = smallProj("widget-app", 0.8)
-        let proj2 = smallProj("api-server", 0.7)
-        let proj3 = smallProj("utils-lib", 0.6)
-        let proj4 = smallProj("test-harness", 0.5)
-        let proj5 = smallProj("demo-site", 0.4)
+        let proj1 = smallProj("widget-app", size: 0.8)
+        let proj2 = smallProj("api-server", size: 0.7)
+        let proj3 = smallProj("utils-lib", size: 0.6)
+        let proj4 = smallProj("test-harness", size: 0.5)
+        let proj5 = smallProj("demo-site", size: 0.4)
 
         let desktop = dir("Desktop", parent: home, cat: .codeProjects, children: [
             atlas, pebble, orbit, sq, oldSaas, sandbox, proj1, proj2, proj3, proj4, proj5

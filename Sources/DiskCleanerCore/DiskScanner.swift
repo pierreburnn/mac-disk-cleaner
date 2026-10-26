@@ -189,7 +189,7 @@ public final class DiskScanner: @unchecked Sendable {
         // Get modification date of the directory itself
         var dirStat = stat()
         if lstat(url.path, &dirStat) == 0 {
-            node.modificationDate = Date(timeIntervalSince1970: Double(dirStat.st_mtime))
+            node.modificationDate = Date(timeIntervalSince1970: mtimeSeconds(dirStat))
             node.allocatedSize += Int64(dirStat.st_blocks) * 512
         }
 
@@ -296,7 +296,7 @@ public final class DiskScanner: @unchecked Sendable {
                         url: url,
                         isDirectory: false,
                         allocatedSize: 0,
-                        modificationDate: Date(timeIntervalSince1970: Double(st.st_mtime)),
+                        modificationDate: Date(timeIntervalSince1970: mtimeSeconds(st)),
                         category: cat
                     )
                     counter.addFile(bytes: 0)
@@ -312,7 +312,7 @@ public final class DiskScanner: @unchecked Sendable {
                 url: url,
                 isDirectory: false,
                 allocatedSize: allocatedSize,
-                modificationDate: Date(timeIntervalSince1970: Double(st.st_mtime)),
+                modificationDate: Date(timeIntervalSince1970: mtimeSeconds(st)),
                 category: cat
             )
             counter.addFile(bytes: allocatedSize)
@@ -372,4 +372,14 @@ private final class ScanCounter: @unchecked Sendable {
             progress(ScanProgress(filesScanned: files, bytesScanned: bytes, currentPath: path))
         }
     }
+}
+
+/// Modification time (seconds since 1970) of a `stat` record, portable Darwin/Linux.
+@inline(__always)
+func mtimeSeconds(_ st: stat) -> Double {
+    #if canImport(Darwin)
+    return Double(st.st_mtimespec.tv_sec)
+    #else
+    return Double(st.st_mtim.tv_sec)
+    #endif
 }
