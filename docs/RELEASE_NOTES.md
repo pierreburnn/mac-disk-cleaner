@@ -1,14 +1,12 @@
-## Disk Cleaner 1.1.0
+## Disk Cleaner 1.2.0
 
-Nouveautés de l'Explorer (demandées par Pierre) :
+Nouveautés demandées par Pierre :
 
-- **Simple clic = sélection** d'une tuile (contour bleu, nom · chemin · taille affichés). Clic dans le vide ou **Échap** pour désélectionner.
-- **Double‑clic = entrer** dans un dossier (tuile parente ou sous‑tuile), avec fil d'Ariane. Pas de délai sur le simple clic.
-- **Bouton « Supprimer »** en bas à droite (et ⌘⌫) : met l'élément sélectionné **à la Corbeille** (`FileManager.trashItem`, récupérable) après confirmation *Mettre à la Corbeille / Annuler*. Jamais de suppression définitive.
-  - Refusé hors du dossier personnel (liens symboliques résolus), pour `~` lui‑même et pour les dossiers de premier niveau protégés (`~/Library`, `~/Desktop`, `~/Documents`, `~/Downloads`, `~/Pictures`, `~/Music`, `~/Movies`…) — leur contenu reste supprimable.
-  - Désactivé en mode démo et pour les tuiles regroupant de petits éléments.
-  - Mise à jour immédiate de la treemap, des tailles parentes, des statistiques et des recommandations, sans nouvelle analyse.
-- Corrections : les noms de tuiles ne sont tronqués que lorsque la place manque vraiment ; suppression de la fine bande « wrapper » sous `.gradle/caches` (démo) et des tuiles « fil » de moins de 6 pt.
-- Le script de nettoyage est inchangé : il n'est jamais exécuté par l'app.
+- **Sélection multiple** : un simple clic **ajoute** une tuile à la sélection, un nouveau clic la **retire**. Toutes les tuiles sélectionnées gardent le contour bleu. **Échap** vide la sélection.
+- **Panneau « Selection »** : la liste de tout ce qui est sélectionné. Les tuiles cliquées sont en tête (« Selected in explorer » : nom, chemin, taille, case à cocher, bouton ✕), les recommandations Safe to remove / Review first suivent. Le total ne compte jamais deux fois un chemin inclus dans un autre.
+- **Supprimer (N)** met à la Corbeille **tout ce qui est coché** : les tuiles et les chemins réels des recommandations. Une seule confirmation liste les éléments, les chemins et le total. Seul `trashItem` est utilisé, avec les mêmes protections qu'avant (`~`, dossiers de premier niveau, hors du dossier personnel, liens symboliques). Les chemins refusés sont ignorés et signalés, puis un résumé indique « X mis à la Corbeille, Y refusés ou en erreur ». Tout est mis à jour sans nouvelle analyse.
+- **Copy script / Save…** utilisent la même sélection : les tuiles cliquées sont ajoutées au script, qui n'est jamais exécuté par l'app.
+- **Animation de zoom** au double‑clic (la tuile s'agrandit, ≈ 0,35 s) et animation inverse par le fil d'Ariane. Elle respecte « Réduire les animations ».
+- **Légende** : libellés complets, sur deux lignes si nécessaire, sans jamais chevaucher le bouton.
 
-**Installation :** ouvrez le `.dmg`, glissez l'app dans Applications. Au premier lancement : clic droit › Ouvrir (app non notariée), ou `xattr -dr com.apple.quarantine "/Applications/Disk Cleaner.app"`. L'espace n'est libéré qu'après avoir vidé la Corbeille.
+**Installation :** ouvrez le `.dmg` et glissez l'app dans Applications. Au premier lancement : clic droit › Ouvrir (app non notariée), ou `xattr -dr com.apple.quarantine "/Applications/Disk Cleaner.app"`. L'espace n'est libéré qu'après avoir vidé la Corbeille.

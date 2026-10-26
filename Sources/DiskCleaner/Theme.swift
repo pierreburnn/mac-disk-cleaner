@@ -92,6 +92,7 @@ public struct Theme {
     // MARK: - Cleanable overlay
     public static let cleanableHatchColor = Color(red: 0.204, green: 0.659, blue: 0.325).opacity(0.35) // #34A853
     public static let selectionColor = Color(red: 0.0, green: 0.478, blue: 1.0)    // system blue
+    public static let selectionBadgeBg = Color(red: 0.882, green: 0.929, blue: 1.0)  // #E1EDFF
     public static let destructive = Color(red: 0.851, green: 0.200, blue: 0.180)     // #D9332E
     public static let destructiveHover = Color(red: 0.776, green: 0.165, blue: 0.149)
     public static let cleanableBorder = Color(red: 0.400, green: 0.733, blue: 0.482) // #66BB7B

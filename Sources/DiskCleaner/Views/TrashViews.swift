@@ -27,16 +27,13 @@ struct SelectionInfo: View {
     @EnvironmentObject var model: AppModel
 
     var body: some View {
-        if let selection = model.tileSelection {
+        let count = model.explorerSelection.count
+        if count > 0 {
             HStack(spacing: 7) {
                 RoundedRectangle(cornerRadius: 2.5, style: .continuous)
                     .strokeBorder(Theme.selectionColor, lineWidth: 2)
                     .frame(width: 11, height: 11)
-                switch selection {
-                case .node(let node):
-                    Image(systemName: node.isDirectory ? "folder" : "doc")
-                        .font(.system(size: 11))
-                        .foregroundColor(Theme.textSecondary)
+                if count == 1, let pair = model.explorerItems.first, let node = pair.node {
                     Text(node.name)
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(Theme.textPrimary)
@@ -47,13 +44,15 @@ struct SelectionInfo: View {
                         .foregroundColor(Theme.textSecondary)
                         .lineLimit(1)
                         .truncationMode(.middle)
-                    Text((node.approximate ? "~" : "") + ByteFormatter.format(node.totalAllocatedSize))
+                    Text(ByteFormatter.format(node.totalAllocatedSize))
                         .font(Theme.monoFont(size: 11.5, weight: .medium))
                         .foregroundColor(Theme.textPrimary)
                         .fixedSize()
-                        .layoutPriority(2)
-                case .aggregate(_, let bytes, let count):
-                    Text("\(count) petits éléments regroupés")
+                } else {
+                    let bytes = SelectionPlanner.plan(
+                        entries: model.explorerItems.compactMap { $0.node.map(SelectionEntry.tile) },
+                        root: model.rootNode, policy: model.deletionPolicy).selectedBytes
+                    Text("\(count) tuiles sélectionnées")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundColor(Theme.textPrimary)
                         .lineLimit(1)
@@ -62,12 +61,16 @@ struct SelectionInfo: View {
                         .foregroundColor(Theme.textPrimary)
                         .fixedSize()
                 }
+                Text("Échap pour vider")
+                    .font(.system(size: 10.5))
+                    .foregroundColor(Theme.textTertiary)
+                    .fixedSize()
             }
         }
     }
 }
 
-// MARK: - "Supprimer" button (explorer footer, bottom right)
+// MARK: - "Supprimer (N)" button (explorer footer, bottom right)
 
 struct TrashButton: View {
     @EnvironmentObject var model: AppModel
@@ -75,9 +78,10 @@ struct TrashButton: View {
 
     var body: some View {
         let enabled = model.canTrashSelection
+        let n = model.trashCount
         HStack(spacing: 5) {
             Image(systemName: "trash").font(.system(size: 11, weight: .semibold))
-            Text("Supprimer").font(.system(size: 12, weight: .semibold))
+            Text(n > 0 ? "Supprimer (\(n))" : "Supprimer").font(.system(size: 12, weight: .semibold))
         }
         .foregroundColor(enabled ? .white : Theme.textTertiary)
         .padding(.horizontal, 12)
@@ -93,65 +97,62 @@ struct TrashButton: View {
         .contentShape(Rectangle())
         .onHover { hovered = $0 }
         .onTapGesture { if enabled { model.requestTrashSelection() } }
-        .help(enabled ? "Mettre l’élément sélectionné à la Corbeille (⌘⌫)"
-                      : (model.trashRefusal?.frenchDescription ?? "Suppression indisponible pendant l’opération en cours."))
+        .help(model.trashDisabledReason ?? "Mettre à la Corbeille tout ce qui est coché dans le panneau de droite (⌘⌫)")
         .accessibilityAddTraits(.isButton)
-        .accessibilityLabel("Supprimer")
+        .accessibilityLabel(n > 0 ? "Supprimer \(n) éléments" : "Supprimer")
     }
 }
 
-// MARK: - Confirmation (custom-drawn so it also renders in snapshots)
+// MARK: - Grouped confirmation (custom-drawn so it also renders in snapshots)
 
 struct TrashConfirmationOverlay: View {
     @EnvironmentObject var model: AppModel
+    @Environment(\.isSnapshot) var isSnapshot: Bool
 
     var body: some View {
-        if let node = model.pendingTrash {
+        if let pending = model.pendingPlan {
+            let plan = pending.plan
             ZStack {
                 Color.black.opacity(0.18)
                     .contentShape(Rectangle())
                     .onTapGesture { }           // swallow clicks behind the dialog
                 VStack(spacing: 0) {
                     Image(systemName: "trash.circle.fill")
-                        .font(.system(size: 44))
+                        .font(.system(size: 40))
                         .foregroundStyle(.white, Theme.destructive)
-                        .padding(.top, 20)
-                    Text("Mettre « \(node.name) » à la Corbeille ?")
+                        .padding(.top, 18)
+                    Text("Mettre \(plan.targets.count) élément\(plan.targets.count > 1 ? "s" : "") à la Corbeille ?")
                         .font(.system(size: 13.5, weight: .bold))
                         .foregroundColor(Theme.textPrimary)
-                        .multilineTextAlignment(.center)
+                        .padding(.top, 10)
+                    Text("Total : \(ByteFormatter.format(plan.trashableBytes))")
+                        .font(Theme.monoFont(size: 12, weight: .medium))
+                        .foregroundColor(Theme.textPrimary)
+                        .padding(.top, 4)
+
+                    list(pending)
+                        .frame(height: listHeight(pending))
+                        .background(RoundedRectangle(cornerRadius: 7).fill(Theme.segmentTrack))
+                        .clipShape(RoundedRectangle(cornerRadius: 7))
                         .padding(.top, 12)
+                        .padding(.horizontal, 16)
+
+                    Text("Les éléments seront déplacés dans la Corbeille : récupérables tant qu’elle n’a pas été vidée. L’espace n’est libéré qu’après avoir vidé la Corbeille.")
+                        .font(.system(size: 11))
+                        .foregroundColor(Theme.textSecondary)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 10)
                         .padding(.horizontal, 18)
-                    VStack(spacing: 6) {
-                        Text(node.url.path)
-                            .font(Theme.monoFont(size: 11))
-                            .foregroundColor(Theme.textPrimary)
-                            .multilineTextAlignment(.center)
-                            .lineLimit(3)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 6)
-                            .frame(maxWidth: .infinity)
-                            .background(RoundedRectangle(cornerRadius: 6).fill(Theme.segmentTrack))
-                        Text("\(node.isDirectory ? "Dossier" : "Fichier") · \((node.approximate ? "~" : "") + ByteFormatter.format(node.totalAllocatedSize))")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundColor(Theme.textPrimary)
-                        Text("L’élément sera déplacé dans la Corbeille : vous pourrez le récupérer tant qu’elle n’a pas été vidée. L’espace n’est libéré qu’après avoir vidé la Corbeille.")
-                            .font(.system(size: 11.5))
-                            .foregroundColor(Theme.textSecondary)
-                            .multilineTextAlignment(.center)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(.top, 10)
-                    .padding(.horizontal, 18)
                     HStack(spacing: 8) {
                         DialogButton(title: "Annuler", style: .cancel) { model.cancelTrash() }
                         DialogButton(title: "Mettre à la Corbeille", style: .destructive) { model.confirmTrash() }
                     }
-                    .padding(.top, 16)
-                    .padding(.horizontal, 18)
+                    .padding(.top, 14)
+                    .padding(.horizontal, 16)
                     .padding(.bottom, 16)
                 }
-                .frame(width: 340)
+                .frame(width: 460)
                 .background(
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(Theme.cardBackground)
@@ -161,6 +162,70 @@ struct TrashConfirmationOverlay: View {
                     .strokeBorder(Theme.cardBorder, lineWidth: 1))
             }
         }
+    }
+
+    private func rowCount(_ p: PendingTrash) -> Int { p.plan.targets.count + p.plan.refused.count + (p.plan.refused.isEmpty ? 0 : 1) }
+    private func listHeight(_ p: PendingTrash) -> CGFloat { min(250, CGFloat(rowCount(p)) * 34 + 8) }
+
+    @ViewBuilder
+    private func list(_ pending: PendingTrash) -> some View {
+        let content = VStack(alignment: .leading, spacing: 0) {
+            ForEach(pending.plan.targets, id: \.path) { t in
+                row(title: title(for: t, in: pending), path: t.path, bytes: t.bytes, refused: nil)
+            }
+            if !pending.plan.refused.isEmpty {
+                Text("Ignorés (protégés ou hors du dossier personnel)")
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundColor(Theme.reviewBadgeText)
+                    .padding(.horizontal, 10)
+                    .frame(height: 34, alignment: .bottomLeading)
+                ForEach(pending.plan.refused, id: \.path) { r in
+                    row(title: (r.path as NSString).lastPathComponent, path: r.path, bytes: r.bytes,
+                        refused: r.refusal.frenchDescription)
+                }
+            }
+        }
+        .padding(.vertical, 4)
+        if isSnapshot {
+            Color.clear.overlay(alignment: .top) { content.fixedSize(horizontal: false, vertical: true) }.clipped()
+        } else {
+            ScrollView(.vertical) { content }
+        }
+    }
+
+    private func title(for t: TrashTarget, in pending: PendingTrash) -> String {
+        let owners = pending.entries.filter { t.entryIDs.contains($0.id) }
+        if let rec = owners.first(where: { $0.kind == .recommendation }) { return rec.title }
+        return (t.path as NSString).lastPathComponent
+    }
+
+    private func row(title: String, path: String, bytes: Int64, refused: String?) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: refused == nil ? "trash" : "nosign")
+                .font(.system(size: 10))
+                .foregroundColor(refused == nil ? Theme.textSecondary : Theme.reviewBadgeText)
+                .frame(width: 14)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundColor(refused == nil ? Theme.textPrimary : Theme.textSecondary)
+                    .lineLimit(1)
+                Text(path)
+                    .font(Theme.monoFont(size: 10))
+                    .foregroundColor(Theme.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .help(refused ?? path)
+            }
+            Spacer(minLength: 6)
+            Text(ByteFormatter.format(bytes))
+                .font(Theme.monoFont(size: 11, weight: .medium))
+                .foregroundColor(refused == nil ? Theme.textPrimary : Theme.textTertiary)
+                .strikethrough(refused != nil)
+                .fixedSize()
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 34)
     }
 }
 
@@ -201,12 +266,12 @@ final class TreemapKeyMonitor {
             if let responder = event.window?.firstResponder, responder is NSText { return event }
             switch event.keyCode {
             case 53: // Escape
-                if model.pendingTrash != nil { model.cancelTrash(); return nil }
-                if model.tileSelection != nil { model.select(nil); return nil }
+                if model.pendingPlan != nil { model.cancelTrash(); return nil }
+                if !model.explorerSelection.isEmpty { model.clearExplorerSelection(); return nil }
             case 36, 76: // Return / Enter
-                if model.pendingTrash != nil { model.confirmTrash(); return nil }
+                if model.pendingPlan != nil { model.confirmTrash(); return nil }
             case 51, 117: // Delete / Forward delete
-                if event.modifierFlags.contains(.command), model.pendingTrash == nil {
+                if event.modifierFlags.contains(.command), model.pendingPlan == nil {
                     model.requestTrashSelection(); return nil
                 }
             default: break

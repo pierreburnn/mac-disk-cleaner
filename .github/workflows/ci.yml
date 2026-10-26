@@ -36,7 +36,7 @@ jobs:
 
       - name: Build .app and .dmg
         run: |
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then V="${GITHUB_REF_NAME#v}"; else V="1.1.0"; fi
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then V="${GITHUB_REF_NAME#v}"; else V="1.2.0"; fi
           scripts/build_app.sh "$V"
 
       - name: Screenshots (demo mode)
@@ -54,9 +54,14 @@ jobs:
           # Throw-away folder that the self-test moves to the Trash for real.
           mkdir -p "$HOME/DiskCleanerTrashSelfTest/sub"
           dd if=/dev/urandom of="$HOME/DiskCleanerTrashSelfTest/sub/blob.bin" bs=1m count=3 2>/dev/null
+          mkdir -p "$HOME/DiskCleanerTrashSelfTest2"
+          dd if=/dev/urandom of="$HOME/DiskCleanerTrashSelfTest2/blob2.bin" bs=1m count=3 2>/dev/null
+          mkdir -p "$HOME/Documents"
           perl -e 'alarm 900; exec @ARGV' "dist/Disk Cleaner.app/Contents/MacOS/DiskCleaner" --snapshot-real "$PWD/screenshots" | tee real-scan.txt
-          grep -q "Trash self-test: gone=true removedFromTree=true" real-scan.txt
+          grep -q "Trash self-test: OK" real-scan.txt
           test ! -e "$HOME/DiskCleanerTrashSelfTest"
+          test ! -e "$HOME/DiskCleanerTrashSelfTest2"
+          test -d "$HOME/Documents"
           ls -la "$HOME/.Trash" || true
           ls -la screenshots
 

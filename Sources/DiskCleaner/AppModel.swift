@@ -47,8 +47,8 @@ public struct TileCoverage: Equatable {
 public final class AppModel: ObservableObject {
     // MARK: - Published state
     @Published public var rootNode: FileNode?
-    @Published public var recommendations: [Recommendation] = [] { didSet { coverageCache = [:] } }
-    @Published public var selectedRecommendationIDs: Set<String> = [] { didSet { coverageCache = [:] } }
+    @Published public var recommendations: [Recommendation] = [] { didSet { coverageCache = [:]; planCache = nil } }
+    @Published public var selectedRecommendationIDs: Set<String> = [] { didSet { coverageCache = [:]; planCache = nil } }
     @Published public var volumeInfo: VolumeInfo?
     @Published public var displayMode: DisplayMode = .category
     @Published public var breadcrumb: [FileNode] = []
@@ -61,20 +61,32 @@ public final class AppModel: ObservableObject {
     @Published public var isDemo: Bool = false
 
     // Treemap selection & move-to-Trash
-    @Published public var tileSelection: TileSelection?
-    @Published public var pendingTrash: FileNode?
-    @Published public var trashErrorMessage: String?
+    /// Tiles clicked in the explorer (multi-selection, click toggles).
+    @Published public var explorerSelection = ExplorerSelection() { didSet { planCache = nil } }
+    /// Grouped confirmation currently shown (nil = none).
+    @Published public var pendingPlan: PendingTrash?
+    /// Summary / error shown after a batch.
+    @Published public var trashReport: TrashReport?
     @Published public var lastTrashedMessage: String?
+    /// Zoom animation request consumed by the treemap.
+    @Published public var zoomRequest: ZoomRequest?
     @Published public var isTrashing: Bool = false
     /// Bumped whenever the tree is edited in place (FileNode is a class).
-    @Published public var treeRevision: Int = 0
+    @Published public var treeRevision: Int = 0 { didSet { planCache = nil } }
     /// Snapshot-only: render the Delete button as it looks for a real item.
     public var previewTrashEnabled: Bool = false
     /// Injectable for tests / previews.
     public var trasher: TrashPerforming = FileManagerTrasher()
+    /// Snapshot-only: freeze the zoom overlay at a given progress for ImageRenderer.
+    public var snapshotZoom: (request: ZoomRequest, progress: CGFloat)?
+    /// Last treemap size written by TreemapView (used by snapshot renderer).
+    public var lastTreemapSize: CGSize = .zero
 
     private let scanner = DiskScanner()
     private var coverageCache: [String: TileCoverage] = [:]
+    var planCache: TrashPlan?
+    /// State of a tile before the first click of a possible double click.
+    var clickMemo: (path: String, wasSelected: Bool, at: Date)?
     /// Set when the app was launched in snapshot mode (no automatic scan).
     public var isSnapshotRun: Bool = false
 
@@ -90,12 +102,13 @@ public final class AppModel: ObservableObject {
         recommendations.filter { selectedRecommendationIDs.contains($0.id) }
     }
 
-    public var selectedBytes: Int64 {
-        selectedRecommendations.reduce(Int64(0)) { $0 + $1.bytes }
-    }
+    /// Everything ticked in the panel (clicked tiles + recommendations), de-duplicated.
+    public var selectedBytes: Int64 { selectionPlan.selectedBytes }
 
+    /// Number of ticked lines in the panel (tiles + recommendations).
     public var selectedCount: Int {
-        selectedRecommendationIDs.count
+        selectedRecommendationIDs.intersection(recommendations.map(\.id)).count
+            + explorerSelection.checkedPaths.count
     }
 
     public var safeRecommendations: [Recommendation] {
@@ -179,7 +192,7 @@ public final class AppModel: ObservableObject {
         selectedRecommendationIDs = DemoData.defaultSelectedIDs
         volumeInfo = DemoData.makeVolumeInfo()
         breadcrumb = []
-        tileSelection = nil
+        explorerSelection.clear()
         isScanning = false
         needsFullDiskAccess = false
     }
@@ -188,7 +201,7 @@ public final class AppModel: ObservableObject {
         isScanning = true
         scanProgress = nil
         breadcrumb = []
-        tileSelection = nil
+        explorerSelection.clear()
 
         let homeURL = FileManager.default.homeDirectoryForCurrentUser
         let result = await scanner.scan(root: homeURL) { [weak self] progress in
@@ -219,7 +232,6 @@ public final class AppModel: ObservableObject {
     }
 
     public func navigateTo(node: FileNode) {
-        tileSelection = nil
         if node.isDirectory && !node.children.isEmpty {
             if let root = rootNode, node.id == root.id {
                 breadcrumb = []
@@ -235,7 +247,6 @@ public final class AppModel: ObservableObject {
             navigateTo(node: parent)
             return
         }
-        tileSelection = nil
         breadcrumb.append(parent)
         breadcrumb.append(node)
     }
@@ -264,14 +275,20 @@ public final class AppModel: ObservableObject {
     }
 
     public func navigateToRoot() {
+        let previous = currentNode
         breadcrumb = []
-        tileSelection = nil
+        if let previous, previous !== currentNode {
+            zoomRequest = ZoomRequest(direction: .zoomOut, rect: .zero, node: previous)
+        }
     }
 
     public func navigateToBreadcrumb(at index: Int) {
-        tileSelection = nil
+        let previous = currentNode
         if index < breadcrumb.count {
             breadcrumb = Array(breadcrumb.prefix(index + 1))
+        }
+        if let previous, previous !== currentNode {
+            zoomRequest = ZoomRequest(direction: .zoomOut, rect: .zero, node: previous)
         }
     }
 
@@ -299,7 +316,7 @@ public final class AppModel: ObservableObject {
 
     public func generateScript() -> String {
         return ScriptGenerator.makeScript(
-            for: selectedRecommendations,
+            for: selectedRecommendations + manualScriptRecommendations,
             home: homePath
         )
     }

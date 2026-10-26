@@ -31,12 +31,12 @@ struct ContentView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.background)
         .overlay(TrashConfirmationOverlay())
-        .alert("Impossible de mettre à la Corbeille", isPresented: Binding(
-            get: { model.trashErrorMessage != nil },
-            set: { if !$0 { model.trashErrorMessage = nil } })) {
-            Button("OK", role: .cancel) { model.trashErrorMessage = nil }
+        .alert(model.trashReport?.title ?? "", isPresented: Binding(
+            get: { model.trashReport != nil },
+            set: { if !$0 { model.trashReport = nil } })) {
+            Button("OK", role: .cancel) { model.trashReport = nil }
         } message: {
-            Text(model.trashErrorMessage ?? "")
+            Text(model.trashReport?.message ?? "")
         }
         .onAppear { if !isSnapshot { keyMonitor.install(model: model) } }
         .onChange(of: model.lastTrashedMessage) { message in

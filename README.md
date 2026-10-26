@@ -2,7 +2,7 @@
 
 **Disk Cleaner** est une application macOS native (SwiftUI) qui analyse l'espace occupé par votre dossier personnel, l'affiche sous forme de *treemap* interactive et vous recommande ce qui peut être nettoyé : caches de paquets, sorties de build, SDK, modèles d'IA, worktrees oubliés…
 
-> 🔒 **Rien n'est jamais supprimé définitivement.** Pour les recommandations, l'app génère un script shell lisible que vous copiez, relisez puis exécutez vous‑même dans le Terminal si vous le souhaitez (l'app ne l'exécute jamais). Le bouton **Supprimer** de l'Explorer, lui, ne fait que **mettre à la Corbeille** l'élément choisi, après confirmation : il reste récupérable tant que la Corbeille n'est pas vidée.
+> 🔒 **Rien n'est jamais supprimé définitivement.** Pour les recommandations, l'app génère un script shell lisible que vous copiez, relisez puis exécutez vous‑même dans le Terminal si vous le souhaitez (l'app ne l'exécute jamais). Le bouton **Supprimer** de l'Explorer, lui, ne fait que **mettre à la Corbeille** ce qui est coché, après confirmation : tout reste récupérable tant que la Corbeille n'est pas vidée.
 
 ![Vue Catégories](docs/screenshots/explorer-category.png)
 
@@ -12,13 +12,17 @@
 
 ![Zoom Desktop](docs/screenshots/explorer-desktop.png)
 
-*Simple clic : la tuile « old-saas » est sélectionnée (contour bleu, nom, chemin et taille affichés), le bouton **Supprimer** est en bas à droite :*
+*Sélection multiple : plusieurs tuiles cliquées (contour bleu) apparaissent en tête du panneau de droite, avec les recommandations cochées, et le bouton **Supprimer (N)** est en bas à droite :*
 
-![Tuile sélectionnée](docs/screenshots/explorer-selected.png)
+![Sélection multiple](docs/screenshots/explorer-selected.png)
 
-*Confirmation avant la mise à la Corbeille :*
+*Confirmation groupée avant la mise à la Corbeille :*
 
-![Confirmation](docs/screenshots/explorer-confirm.png)
+![Confirmation groupée](docs/screenshots/explorer-confirm.png)
+
+*Animation de zoom au double‑clic (image intermédiaire) :*
+
+![Zoom](docs/screenshots/explorer-zoom.png)
 
 *Analyse réelle (dossier personnel du Mac de la CI GitHub, aucune donnée de démo) :*
 
@@ -29,13 +33,13 @@
 ## Téléchargement
 
 - Dernière version : <https://github.com/pierreburnn/mac-disk-cleaner/releases/latest>
-- Lien direct v1.1.0 : [DiskCleaner-1.1.0.dmg](https://github.com/pierreburnn/mac-disk-cleaner/releases/download/v1.1.0/DiskCleaner-1.1.0.dmg)
+- Lien direct v1.2.0 : [DiskCleaner-1.2.0.dmg](https://github.com/pierreburnn/mac-disk-cleaner/releases/download/v1.2.0/DiskCleaner-1.2.0.dmg)
 
 Compatible macOS 13 Ventura et plus récent, Mac Apple Silicon **et** Intel (binaire universel).
 
 ## Installation
 
-1. Téléchargez le fichier `DiskCleaner-1.1.0.dmg`.
+1. Téléchargez le fichier `DiskCleaner-1.2.0.dmg`.
 2. Ouvrez‑le, puis glissez **Disk Cleaner** sur le raccourci **Applications**.
 3. Éjectez le disque image.
 
@@ -59,17 +63,19 @@ Certains dossiers (Mail, Messages, Safari, conteneurs d'apps…) sont protégés
 
 - **Statistiques** en haut : espace libre après nettoyage (espace libre actuel + gain sélectionné), total « Safe to remove », total « Needs review », et la part du disque non analysée (système et applications).
 - **Explorer** : votre dossier personnel en treemap, chaque rectangle proportionnel à l'espace réellement occupé sur le disque. Utilisez le fil d'Ariane (`~ Home › …`) pour revenir en arrière. Le sélecteur **Category / Cleanup** bascule entre les couleurs par catégorie et la mise en évidence de ce qui est nettoyable (hachures vertes).
-- **Simple clic** sur une tuile : elle est **sélectionnée** (contour bleu) ; son nom, son chemin complet et sa taille s'affichent à droite du fil d'Ariane. Clic dans un espace vide ou touche **Échap** : désélection.
-- **Double‑clic** sur une tuile (dossier parent ou sous‑dossier) : on **entre** dedans (zoom + fil d'Ariane).
-- **Supprimer** (bouton rouge en bas à droite de l'Explorer, ou ⌘⌫) : met l'élément sélectionné **à la Corbeille** après une confirmation qui rappelle son nom, son chemin complet et sa taille (**Mettre à la Corbeille** / **Annuler**). Jamais de suppression définitive. Le bouton est désactivé :
-  - en mode démo ;
-  - pour les tuiles qui regroupent plusieurs petits éléments ;
-  - pour le dossier personnel `~` lui‑même et pour les dossiers protégés de premier niveau (`~/Library`, `~/Desktop`, `~/Documents`, `~/Downloads`, `~/Pictures`, `~/Music`, `~/Movies`, `~/Applications`, `~/Public`, `~/.Trash`) — leur **contenu** peut être mis à la Corbeille, pas le dossier lui‑même ;
-  - pour tout chemin hors du dossier personnel (y compris via un lien symbolique).
+- **Simple clic** sur une tuile : elle est **ajoutée à la sélection** (contour bleu). Un nouveau clic sur une tuile déjà sélectionnée l'en **retire**. On peut sélectionner autant de tuiles que l'on veut, y compris dans plusieurs dossiers. **Échap** vide la sélection de l'explorateur.
+- **Double‑clic** sur une tuile (dossier parent ou sous‑dossier) : la tuile **s'agrandit** jusqu'à remplir la treemap (≈ 0,35 s), puis son contenu apparaît. Cliquer dans le fil d'Ariane fait l'animation inverse. Avec *Réglages Système › Accessibilité › Affichage › Réduire les animations*, le zoom est remplacé par un simple fondu. Le double‑clic ne modifie pas la sélection.
+- **Panneau de droite « Selection »** : la liste de **tout ce qui est sélectionné** :
+  - **Selected in explorer** (en tête) : les tuiles cliquées, avec leur nom, leur chemin et leur taille, une case à cocher et un bouton ✕ pour les retirer ;
+  - **Safe to remove / Review first** : les recommandations, à cocher comme avant (chevron pour le détail et les chemins, loupe pour les révéler dans le Finder).
 
-  Après la mise à la Corbeille, la treemap, les tailles des dossiers parents, les statistiques et les recommandations sont mises à jour sans nouvelle analyse. ⚠️ L'espace disque n'est réellement libéré qu'une fois la Corbeille vidée.
-- **Recommendations** : cochez les éléments à nettoyer, dépliez une ligne (chevron) pour voir le détail et les chemins, ou révélez‑les dans le Finder.
-- **Select safe** coche tous les éléments sans risque ; **Copy script** copie le script de nettoyage dans le presse‑papiers ; *Fichier › Save Script…* (⌘S) l'enregistre en `.sh`.
+  Le total du pied de panneau additionne les deux, **sans compter deux fois** un chemin inclus dans un autre (par ex. un dossier et un de ses sous‑dossiers, ou une tuile déjà couverte par une recommandation).
+- **Supprimer (N)** (bouton rouge en bas à droite de l'Explorer, ou ⌘⌫) : met **à la Corbeille tout ce qui est coché** dans le panneau, c'est‑à‑dire les tuiles cliquées et les chemins réels des recommandations cochées. Une seule confirmation liste les éléments, leurs chemins et le total (liste défilante si elle est longue), avec **Mettre à la Corbeille** / **Annuler**. Jamais de suppression définitive : uniquement la Corbeille (`trashItem`). Les chemins suivants sont **ignorés et signalés** :
+  - le dossier personnel `~` lui‑même et les dossiers protégés de premier niveau (`~/Library`, `~/Desktop`, `~/Documents`, `~/Downloads`, `~/Pictures`, `~/Music`, `~/Movies`, `~/Applications`, `~/Public`, `~/.Trash`). Leur **contenu** peut être mis à la Corbeille, pas le dossier lui‑même ;
+  - tout chemin hors du dossier personnel, y compris via un lien symbolique, et les éléments qui n'existent plus.
+
+  Un résumé s'affiche ensuite (« X mis à la Corbeille, Y refusés ou en erreur », avec le détail). La treemap, les tailles des dossiers parents, les statistiques et les recommandations sont mises à jour sans nouvelle analyse. Le bouton est désactivé quand rien n'est coché, et en mode démo. Pour les recommandations qui passent par un outil dans le script (`npm cache clean`, `brew cleanup`…), le bouton met directement leurs dossiers à la Corbeille ; l'outil n'est pas lancé. ⚠️ L'espace disque n'est réellement libéré qu'une fois la Corbeille vidée.
+- **Select safe** coche tous les éléments sans risque. **Copy script** copie le script de nettoyage dans le presse‑papiers et *Fichier › Save Script…* (⌘S) l'enregistre en `.sh`. Les deux utilisent la **même sélection** que le bouton Supprimer : tuiles cliquées et recommandations cochées. L'app n'exécute jamais ce script.
 
 ### Recommandations détectées
 

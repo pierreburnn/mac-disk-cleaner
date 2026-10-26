@@ -13,7 +13,7 @@ struct ExplorerCard: View {
                     Text("Explorer")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(Theme.textPrimary)
-                    Text("Your home folder, sized by space used. Click to select, double-click to open.")
+                    Text("Your home folder by size. Click to add to the selection, double-click to open.")
                         .font(.system(size: 12.5))
                         .foregroundColor(Theme.textSecondary)
                         .lineLimit(1)
@@ -163,7 +163,7 @@ struct BreadcrumbRow: View {
                     .onTapGesture { model.navigateToBreadcrumb(at: index) }
             }
             Spacer(minLength: 16)
-            if model.tileSelection != nil {
+            if !model.explorerSelection.isEmpty {
                 SelectionInfo()
             } else if let message = model.lastTrashedMessage {
                 Label(message, systemImage: "checkmark.circle.fill")

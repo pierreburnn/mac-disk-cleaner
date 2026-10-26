@@ -12,10 +12,10 @@ struct RecommendationsPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Recommendations")
+                Text("Selection")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(Theme.textPrimary)
-                Text("Select items to build a cleanup script")
+                Text("Clicked tiles and ticked recommendations")
                     .font(.system(size: 12.5))
                     .foregroundColor(Theme.textSecondary)
             }
@@ -58,6 +58,16 @@ struct RecommendationsPanel: View {
 
     @ViewBuilder
     private var listContent: some View {
+        if !model.explorerSelection.isEmpty {
+            let items = model.explorerItems
+            groupHeader("Selected in explorer", bg: Theme.selectionBadgeBg, fg: Theme.selectionColor,
+                        total: SelectionPlanner.plan(entries: items.filter { $0.item.checked }.compactMap { $0.node.map(SelectionEntry.tile) },
+                                                     root: model.rootNode, policy: model.deletionPolicy).selectedBytes)
+            ForEach(items, id: \.item.path) { pair in
+                ExplorerSelectionRow(item: pair.item, node: pair.node)
+                Rectangle().fill(Theme.divider).frame(height: 1)
+            }
+        }
         if model.recommendations.isEmpty && !model.isScanning {
             Text(model.rootNode == nil ? "Waiting for the scan…" : "Nothing worth cleaning was found. 🎉")
                 .font(.system(size: 12.5))
@@ -165,6 +175,54 @@ struct FooterButton: View {
             )
             .contentShape(Rectangle())
             .onTapGesture(perform: action)
+    }
+}
+
+// MARK: - Explorer selection row
+
+struct ExplorerSelectionRow: View {
+    let item: ExplorerSelection.Item
+    let node: FileNode?
+    @EnvironmentObject var model: AppModel
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            CustomCheckbox(isChecked: item.checked) { model.setTileChecked(item.path, !item.checked) }
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 5) {
+                    Image(systemName: (node?.isDirectory ?? true) ? "folder" : "doc")
+                        .font(.system(size: 10.5))
+                        .foregroundColor(Theme.textSecondary)
+                    Text(node?.name ?? (item.path as NSString).lastPathComponent)
+                        .font(.system(size: 13.5))
+                        .foregroundColor(Theme.textPrimary)
+                        .lineLimit(1)
+                }
+                Text(model.displayPath(item.path))
+                    .font(Theme.monoFont(size: 11))
+                    .foregroundColor(Theme.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { model.setTileChecked(item.path, !item.checked) }
+            Spacer(minLength: 6)
+            Text(node.map { ($0.approximate ? "~" : "") + ByteFormatter.format($0.totalAllocatedSize) } ?? "—")
+                .font(Theme.monoFont(size: 13, weight: .medium))
+                .foregroundColor(Theme.textPrimary.opacity(item.checked ? 0.85 : 0.45))
+                .lineLimit(1)
+                .fixedSize()
+            Image(systemName: "xmark")
+                .font(.system(size: 9.5, weight: .bold))
+                .foregroundColor(Color(white: 0.55))
+                .frame(width: 18, height: 30)
+                .contentShape(Rectangle())
+                .onTapGesture { model.removeTile(item.path) }
+                .help("Retirer de la sélection")
+        }
+        .padding(.leading, 16)
+        .padding(.trailing, 10)
+        .frame(height: 60)
     }
 }
 
