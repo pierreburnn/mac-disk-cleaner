@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Toolchain
+        run: |
+          swift --version
+          xcodebuild -version
+          sw_vers
+
+      - name: Build (debug)
+        run: swift build
+
+      - name: Tests
+        run: swift test 2>&1 | tee test-output.txt
+
+      - name: Build .app and .dmg
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then V="${GITHUB_REF_NAME#v}"; else V="1.0.0"; fi
+          scripts/build_app.sh "$V"
+
+      - name: Screenshots (demo mode)
+        run: |
+          mkdir -p screenshots
+          perl -e 'alarm 180; exec @ARGV' "dist/Disk Cleaner.app/Contents/MacOS/DiskCleaner" --snapshot "$PWD/screenshots"
+          ls -la screenshots
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: screenshots/*.png
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dmg
+          path: dist/*.dmg
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-output
+          path: test-output.txt
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/*.dmg screenshots/*.png --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/*.dmg screenshots/*.png \
+              --title "Disk Cleaner $GITHUB_REF_NAME" --notes-file docs/RELEASE_NOTES.md
+          fi

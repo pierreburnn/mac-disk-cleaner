@@ -1,0 +1,8 @@
+.build
+*.dmg
+dist/
+.swiftpm
+DerivedData
+.DS_Store
+/screenshots/
+/build/
