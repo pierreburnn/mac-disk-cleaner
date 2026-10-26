@@ -25,7 +25,7 @@ struct ContentView: View {
             .frame(maxHeight: .infinity)
         }
         .padding(.horizontal, Theme.padding)
-        .padding(.top, Theme.padding)
+        .padding(.top, 7)
         .padding(.bottom, Theme.padding)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.background)

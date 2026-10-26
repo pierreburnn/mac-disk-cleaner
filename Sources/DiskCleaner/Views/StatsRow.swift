@@ -29,7 +29,7 @@ struct StatsRow: View {
                      trailing: "system & apps",
                      trailingColor: Theme.textSecondary)
         }
-        .frame(height: 76)
+        .frame(height: 86)
         .background(Theme.cardBackground)
         .clipShape(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)

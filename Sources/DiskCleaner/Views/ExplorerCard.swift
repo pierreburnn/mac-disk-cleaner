@@ -50,7 +50,7 @@ struct ExplorerCard: View {
 
             LegendRow()
                 .padding(.horizontal, 18)
-                .frame(height: 40)
+                .frame(height: 38)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.cardBackground)

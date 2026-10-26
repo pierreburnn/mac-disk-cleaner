@@ -17,8 +17,8 @@ struct TreemapTileItem: Identifiable {
 enum TreemapGeometry {
     static let outerGap: CGFloat = 3      // half of the 6 pt gap between top-level tiles
     static let innerGap: CGFloat = 2      // half of the 4 pt gap between inner tiles
-    static let headerHeight: CGFloat = 24
-    static let innerPadding: CGFloat = 5
+    static let headerHeight: CGFloat = 25
+    static let innerPadding: CGFloat = 6
 
     static func items(for node: FileNode, in size: CGSize) -> [TreemapTileItem] {
         guard size.width > 1, size.height > 1 else { return [] }
@@ -200,7 +200,7 @@ struct TreemapTile: View {
             }
         } else {
             VStack(alignment: .leading, spacing: 0) {
-                if w > 38 && h > 18 {
+                if w > 56 && h > 26 {
                     Text(node.name)
                         .font(.system(size: 11))
                         .foregroundColor(Theme.textPrimary.opacity(0.8))
