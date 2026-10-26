@@ -51,6 +51,8 @@ struct ExplorerCard: View {
             HStack(spacing: 12) {
                 LegendRow()
                 TrashButton()
+                    .fixedSize()
+                    .layoutPriority(1)
             }
             .padding(.leading, 18)
             .padding(.trailing, 15)
@@ -181,42 +183,52 @@ struct BreadcrumbRow: View {
 
 struct LegendRow: View {
     var body: some View {
-        // Full labels when they fit beside the "Supprimer" button, short ones otherwise.
+        // Always the full labels. One line when it fits beside the "Supprimer"
+        // button, otherwise a slightly smaller font, otherwise two lines.
+        // The legend is clipped to its own frame so it never overlaps the button.
         ViewThatFits(in: .horizontal) {
-            legend(spacing: 18, short: false)
-            legend(spacing: 14, short: false)
-            legend(spacing: 14, short: true)
-            legend(spacing: 10, short: true)
+            oneLine(spacing: 18, font: 11.5)
+            oneLine(spacing: 14, font: 11)
+            oneLine(spacing: 11, font: 10.5)
+            twoLines(font: 11)
+            twoLines(font: 10.5)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .clipped()
     }
 
-    private func legend(spacing: CGFloat, short: Bool) -> some View {
-        HStack(spacing: spacing) {
-            ForEach(NodeCategory.allCases, id: \.self) { cat in
-                HStack(spacing: 6) {
-                    RoundedRectangle(cornerRadius: 2)
-                        .fill(Theme.legendColor(for: cat))
-                        .frame(width: 8, height: 8)
-                    Text(short ? Self.shortName(cat) : cat.displayName)
-                        .font(.system(size: 11.5))
-                        .foregroundColor(Theme.textSecondary)
-                        .lineLimit(1)
-                        .fixedSize()
-                }
-            }
+    private static let firstRow: [NodeCategory] = Array(NodeCategory.allCases.prefix(3))
+    private static let secondRow: [NodeCategory] = Array(NodeCategory.allCases.dropFirst(3))
+
+    private func oneLine(spacing: CGFloat, font: CGFloat) -> some View {
+        row(NodeCategory.allCases, spacing: spacing, font: font).fixedSize()
+    }
+
+    private func twoLines(font: CGFloat) -> some View {
+        // Grid so the two rows line up in columns.
+        Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 3) {
+            GridRow { ForEach(Self.firstRow, id: \.self) { item($0, font: font) } }
+            GridRow { ForEach(Self.secondRow, id: \.self) { item($0, font: font) } }
         }
         .fixedSize()
     }
 
-    static func shortName(_ cat: NodeCategory) -> String {
-        switch cat {
-        case .documents: return "Documents"
-        case .devTools: return "Dev tools"
-        case .codeProjects: return "Projects"
-        case .sdks: return "SDKs"
-        case .aiModels: return "AI models"
-        case .packageCaches: return "Pkg caches"
+    private func row(_ cats: [NodeCategory], spacing: CGFloat, font: CGFloat) -> some View {
+        HStack(spacing: spacing) {
+            ForEach(cats, id: \.self) { item($0, font: font) }
+        }
+    }
+
+    private func item(_ cat: NodeCategory, font: CGFloat) -> some View {
+        HStack(spacing: 6) {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Theme.legendColor(for: cat))
+                .frame(width: 8, height: 8)
+            Text(cat.displayName)
+                .font(.system(size: font))
+                .foregroundColor(Theme.textSecondary)
+                .lineLimit(1)
+                .fixedSize()
         }
     }
 }
